@@ -1,0 +1,125 @@
+name: CI
+
+# Proposal §4.3, step 1: lint and types, unit tests with a 70 % coverage gate, integration tests
+# against an ephemeral PostgreSQL, multi-stage image builds and a Trivy scan that fails on
+# HIGH/CRITICAL findings. Nothing here pushes images; cd.yml does that after the merge.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: api · lint, types, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prisma client
+        run: pnpm --filter @statline/api prisma:generate
+      - run: pnpm --filter @statline/api lint
+      - run: pnpm --filter @statline/api format:check
+      - run: pnpm --filter @statline/api typecheck
+      - name: Unit tests (Jest + Supertest, coverage ≥ 70 %)
+        run: pnpm --filter @statline/api test:coverage
+
+  python:
+    name: ${{ matrix.service }} · ruff, mypy, pytest
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [ingesta, predicciones]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.4"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - name: Unit tests (pytest, coverage ≥ 70 %)
+        run: uv run pytest
+
+  integration:
+    name: integration · PostgreSQL 16
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: statline
+          POSTGRES_PASSWORD: statline
+          POSTGRES_DB: statline
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U statline" --health-interval 2s --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://statline:statline@localhost:5432/statline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply Prisma migrations
+        run: pnpm --filter @statline/api prisma:migrate
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.4"
+          enable-cache: true
+      - name: Ingesta repository against the real schema
+        working-directory: services/ingesta
+        run: uv sync --frozen && uv run pytest -m integration --no-cov
+
+  images:
+    name: image · ${{ matrix.service }}
+    needs: [api, python]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, predicciones, ingesta]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (multi-stage, linux/amd64 like the AKS nodes)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: statline/${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+      - name: Trivy (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: statline/${{ matrix.service }}:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
