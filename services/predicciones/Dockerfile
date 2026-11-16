@@ -26,7 +26,7 @@ COPY services/predicciones/ ./
 RUN uv sync --frozen --no-dev
 
 FROM python:3.12-slim AS runtime
-RUN useradd --uid 10001 --create-home predicciones
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*  && useradd --uid 10001 --create-home predicciones
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app/src /app/src

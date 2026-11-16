@@ -22,7 +22,9 @@ RUN pnpm prisma generate && pnpm build \
  && cd /out && ./node_modules/.bin/prisma generate
 
 FROM node:20-alpine AS runtime
-RUN apk add --no-cache openssl
+# Patched OS packages; npm, npx and corepack are not needed at runtime and bundle their own
+# (often vulnerable) dependencies, so they are removed from the final image.
+RUN apk upgrade --no-cache && apk add --no-cache openssl  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 ENV NODE_ENV=production PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
