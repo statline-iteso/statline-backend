@@ -1,0 +1,314 @@
+// StatLine domain model (docs/ARCHITECTURE.md §3).
+// Tables and columns are snake_case because the ingesta and predicciones services
+// (Python) read and write the same tables with SQL. Prisma Migrate owns the schema.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Deporte {
+  BASQUETBOL
+  AMERICANO
+  FUTBOL
+
+  @@map("deporte")
+}
+
+enum Rol {
+  ADMIN
+  ANALISTA
+  USUARIO
+
+  @@map("rol")
+}
+
+enum EstatusJugador {
+  DISPONIBLE
+  DUDA
+  LESIONADO
+  SUSPENDIDO
+
+  @@map("estatus_jugador")
+}
+
+enum EstatusPartido {
+  PROGRAMADO
+  EN_JUEGO
+  FINALIZADO
+  POSPUESTO
+  CANCELADO
+
+  @@map("estatus_partido")
+}
+
+enum TipoInferencia {
+  RESULTADO_PARTIDO
+  PROYECCION_JUGADOR
+
+  @@map("tipo_inferencia")
+}
+
+enum TipoAlerta {
+  LESION
+  UMBRAL
+  INICIO_PARTIDO
+
+  @@map("tipo_alerta")
+}
+
+enum TipoElemento {
+  JUGADOR
+  EQUIPO
+
+  @@map("tipo_elemento")
+}
+
+enum EstatusIngesta {
+  EN_CURSO
+  EXITOSA
+  FALLIDA
+
+  @@map("estatus_ingesta")
+}
+
+/// 1 · Usuario: registro, autenticación y roles.
+model Usuario {
+  id            String             @id @default(uuid()) @db.Uuid
+  email         String             @unique
+  nombre        String
+  passwordHash  String             @map("password_hash")
+  rol           Rol                @default(USUARIO)
+  creadoEn      DateTime           @default(now()) @map("creado_en")
+  actualizadoEn DateTime           @updatedAt @map("actualizado_en")
+  listas        ListaSeguimiento[]
+  alertas       Alerta[]
+
+  @@map("usuario")
+}
+
+/// 2 · Liga: catálogo de competencias y configuración del proveedor.
+model Liga {
+  id              String    @id @default(uuid()) @db.Uuid
+  nombre          String
+  deporte         Deporte
+  pais            String?
+  temporada       String
+  proveedor       String    @default("api-sports")
+  proveedorLigaId String    @map("proveedor_liga_id")
+  activa          Boolean   @default(true)
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+  equipos         Equipo[]
+  partidos        Partido[]
+
+  @@unique([proveedor, proveedorLigaId, temporada])
+  @@index([deporte])
+  @@map("liga")
+}
+
+/// 3 · Equipo: clubes y franquicias.
+model Equipo {
+  id             String                      @id @default(uuid()) @db.Uuid
+  ligaId         String                      @map("liga_id") @db.Uuid
+  nombre         String
+  abreviatura    String?
+  conferencia    String?
+  ciudad         String?
+  logoUrl        String?                     @map("logo_url")
+  formaReciente  String?                     @map("forma_reciente") /// p. ej. "GGPEG" (más reciente al final)
+  proveedorId    String                      @map("proveedor_id")
+  liga           Liga                        @relation(fields: [ligaId], references: [id], onDelete: Cascade)
+  jugadores      Jugador[]
+  partidosLocal  Partido[]                   @relation("PartidoLocal")
+  partidosVisita Partido[]                   @relation("PartidoVisita")
+  estadisticas   EstadisticaJugadorPartido[]
+  alertas        Alerta[]
+
+  @@unique([ligaId, proveedorId])
+  @@map("equipo")
+}
+
+/// 4 · Jugador: directorio de atletas y estatus médico.
+model Jugador {
+  id            String                      @id @default(uuid()) @db.Uuid
+  equipoId      String?                     @map("equipo_id") @db.Uuid
+  deporte       Deporte
+  nombre        String
+  posicion      String?
+  numero        Int?
+  estatus       EstatusJugador              @default(DISPONIBLE)
+  proveedorId   String                      @map("proveedor_id")
+  actualizadoEn DateTime                    @default(now()) @updatedAt @map("actualizado_en")
+  equipo        Equipo?                     @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+  estadisticas  EstadisticaJugadorPartido[]
+  proyecciones  ProyeccionJugador[]
+  alertas       Alerta[]
+
+  @@unique([deporte, proveedorId])
+  @@index([nombre])
+  @@map("jugador")
+}
+
+/// 5 · Partido: calendario, marcador y estatus.
+model Partido {
+  id             String                      @id @default(uuid()) @db.Uuid
+  ligaId         String                      @map("liga_id") @db.Uuid
+  localId        String                      @map("local_id") @db.Uuid
+  visitaId       String                      @map("visita_id") @db.Uuid
+  fecha          DateTime
+  jornada        Int?
+  temporada      String
+  estatus        EstatusPartido              @default(PROGRAMADO)
+  marcadorLocal  Int?                        @map("marcador_local")
+  marcadorVisita Int?                        @map("marcador_visita")
+  proveedorId    String                      @map("proveedor_id")
+  liga           Liga                        @relation(fields: [ligaId], references: [id], onDelete: Cascade)
+  local          Equipo                      @relation("PartidoLocal", fields: [localId], references: [id])
+  visita         Equipo                      @relation("PartidoVisita", fields: [visitaId], references: [id])
+  estadisticas   EstadisticaJugadorPartido[]
+  pronosticos    PronosticoPartido[]
+  proyecciones   ProyeccionJugador[]
+
+  @@unique([ligaId, proveedorId])
+  @@index([fecha])
+  @@index([ligaId, jornada])
+  @@map("partido")
+}
+
+/// 6 · EstadisticaJugadorPartido: línea de caja. Columnas comunes + métricas del deporte en JSONB
+/// (validadas contra schemas/<deporte>.schema.json antes de insertar).
+model EstadisticaJugadorPartido {
+  id        String   @id @default(uuid()) @db.Uuid
+  partidoId String   @map("partido_id") @db.Uuid
+  jugadorId String   @map("jugador_id") @db.Uuid
+  equipoId  String   @map("equipo_id") @db.Uuid
+  deporte   Deporte
+  minutos   Int?
+  metricas  Json     @db.JsonB
+  creadoEn  DateTime @default(now()) @map("creado_en")
+  partido   Partido  @relation(fields: [partidoId], references: [id], onDelete: Cascade)
+  jugador   Jugador  @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  equipo    Equipo   @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+
+  @@unique([partidoId, jugadorId])
+  @@index([jugadorId])
+  @@index([metricas(ops: JsonbPathOps)], type: Gin)
+  @@map("estadistica_jugador_partido")
+}
+
+/// 7 · ListaSeguimiento: agrupaciones creadas por los usuarios.
+model ListaSeguimiento {
+  id        String          @id @default(uuid()) @db.Uuid
+  usuarioId String          @map("usuario_id") @db.Uuid
+  nombre    String
+  creadoEn  DateTime        @default(now()) @map("creado_en")
+  usuario   Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  elementos ElementoLista[]
+
+  @@index([usuarioId])
+  @@map("lista_seguimiento")
+}
+
+model ElementoLista {
+  id      String           @id @default(uuid()) @db.Uuid
+  listaId String           @map("lista_id") @db.Uuid
+  tipo    TipoElemento
+  refId   String           @map("ref_id") @db.Uuid /// id del Jugador o Equipo
+  lista   ListaSeguimiento @relation(fields: [listaId], references: [id], onDelete: Cascade)
+
+  @@unique([listaId, tipo, refId])
+  @@map("elemento_lista")
+}
+
+/// 8 · PronosticoPartido: probabilidades local/empate/visita y marcador esperado.
+model PronosticoPartido {
+  id                     String           @id @default(uuid()) @db.Uuid
+  partidoId              String           @map("partido_id") @db.Uuid
+  modeloId               String           @map("modelo_id") @db.Uuid
+  probLocal              Float            @map("prob_local")
+  probEmpate             Float            @map("prob_empate")
+  probVisita             Float            @map("prob_visita")
+  marcadorEsperadoLocal  Float?           @map("marcador_esperado_local")
+  marcadorEsperadoVisita Float?           @map("marcador_esperado_visita")
+  generadoEn             DateTime         @default(now()) @map("generado_en")
+  partido                Partido          @relation(fields: [partidoId], references: [id], onDelete: Cascade)
+  modelo                 ModeloPrediccion @relation(fields: [modeloId], references: [id])
+
+  @@index([partidoId])
+  @@map("pronostico_partido")
+}
+
+/// 9 · ProyeccionJugador: métricas estimadas para el siguiente partido.
+model ProyeccionJugador {
+  id         String           @id @default(uuid()) @db.Uuid
+  jugadorId  String           @map("jugador_id") @db.Uuid
+  partidoId  String           @map("partido_id") @db.Uuid
+  modeloId   String           @map("modelo_id") @db.Uuid
+  metricas   Json             @db.JsonB
+  generadoEn DateTime         @default(now()) @map("generado_en")
+  jugador    Jugador          @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  partido    Partido          @relation(fields: [partidoId], references: [id], onDelete: Cascade)
+  modelo     ModeloPrediccion @relation(fields: [modeloId], references: [id])
+
+  @@index([jugadorId, partidoId])
+  @@map("proyeccion_jugador")
+}
+
+/// 10 · ModeloPrediccion: bitácora versionada de artefactos. Solo uno activo por (deporte, tipo).
+model ModeloPrediccion {
+  id            String              @id @default(uuid()) @db.Uuid
+  deporte       Deporte
+  tipo          TipoInferencia
+  version       String
+  artefactoUri  String              @map("artefacto_uri")
+  nombreMetrica String              @map("nombre_metrica") /// p. ej. "log_loss", "mae"
+  metricaError  Float               @map("metrica_error")
+  activo        Boolean             @default(false)
+  entrenadoEn   DateTime            @default(now()) @map("entrenado_en")
+  pronosticos   PronosticoPartido[]
+  proyecciones  ProyeccionJugador[]
+
+  @@unique([deporte, tipo, version])
+  @@index([deporte, tipo, activo])
+  @@map("modelo_prediccion")
+}
+
+/// 11 · Alerta: disparadores por lesión, umbral o inicio de partido.
+model Alerta {
+  id              String     @id @default(uuid()) @db.Uuid
+  usuarioId       String     @map("usuario_id") @db.Uuid
+  tipo            TipoAlerta
+  jugadorId       String?    @map("jugador_id") @db.Uuid
+  equipoId        String?    @map("equipo_id") @db.Uuid
+  condicion       Json?      @db.JsonB /// UMBRAL: { "metrica": "puntos", "operador": ">=", "valor": 30 }
+  activa          Boolean    @default(true)
+  ultimaDisparada DateTime?  @map("ultima_disparada")
+  creadoEn        DateTime   @default(now()) @map("creado_en")
+  usuario         Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  jugador         Jugador?   @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  equipo          Equipo?    @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("alerta")
+}
+
+/// 12 · EjecucionIngesta: auditoría de cada corrida de los CronJob.
+model EjecucionIngesta {
+  id                  String         @id @default(uuid()) @db.Uuid
+  deporte             Deporte
+  proveedor           String
+  estatus             EstatusIngesta @default(EN_CURSO)
+  iniciadaEn          DateTime       @default(now()) @map("iniciada_en")
+  finalizadaEn        DateTime?      @map("finalizada_en")
+  registrosProcesados Int            @default(0) @map("registros_procesados")
+  peticionesUsadas    Int            @default(0) @map("peticiones_usadas")
+  error               String?
+
+  @@index([deporte, iniciadaEn])
+  @@map("ejecucion_ingesta")
+}

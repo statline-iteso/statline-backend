@@ -1,0 +1,46 @@
+{
+  "get": "games/statistics/players",
+  "errors": [],
+  "results": 3,
+  "response": [
+    {
+      "game": { "id": 414001 },
+      "team": { "id": 140 },
+      "player": { "id": 2001, "name": "N. Jokic" },
+      "type": "starters",
+      "minutes": "36:20",
+      "field_goals": { "total": 12, "attempts": 19, "percentage": 63 },
+      "threepoint_goals": { "total": 2, "attempts": 4, "percentage": 50 },
+      "freethrows_goals": { "total": 5, "attempts": 6, "percentage": 83 },
+      "rebounds": { "total": 14 },
+      "assists": 11,
+      "points": 31
+    },
+    {
+      "game": { "id": 414001 },
+      "team": { "id": 145 },
+      "player": { "id": 2002, "name": "L. James" },
+      "type": "starters",
+      "minutes": "34:02",
+      "field_goals": { "total": 10, "attempts": 21, "percentage": 47 },
+      "threepoint_goals": { "total": 3, "attempts": 8, "percentage": 37 },
+      "freethrows_goals": { "total": 4, "attempts": 5, "percentage": 80 },
+      "rebounds": { "total": 7 },
+      "assists": 9,
+      "points": 27
+    },
+    {
+      "game": { "id": 414001 },
+      "team": { "id": 145 },
+      "player": { "id": 2003, "name": "DNP Player" },
+      "type": "bench",
+      "minutes": null,
+      "field_goals": { "total": null, "attempts": null, "percentage": null },
+      "threepoint_goals": { "total": null, "attempts": null, "percentage": null },
+      "freethrows_goals": { "total": null, "attempts": null, "percentage": null },
+      "rebounds": { "total": null },
+      "assists": null,
+      "points": null
+    }
+  ]
+}

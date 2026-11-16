@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://statline/schemas/americano.schema.json",
+  "title": "Métricas de jugador por partido · NFL",
+  "description": "Contenido de EstadisticaJugadorPartido.metricas cuando deporte = AMERICANO. Cada grupo es opcional: un jugador solo tiene los que aplican a su posición.",
+  "type": "object",
+  "additionalProperties": false,
+  "minProperties": 1,
+  "$defs": {
+    "noNegativo": { "type": "integer", "minimum": 0 }
+  },
+  "properties": {
+    "pase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completos", "intentos", "yardas"],
+      "properties": {
+        "completos": { "$ref": "#/$defs/noNegativo" },
+        "intentos": { "$ref": "#/$defs/noNegativo" },
+        "yardas": { "type": "integer" },
+        "touchdowns": { "$ref": "#/$defs/noNegativo" },
+        "intercepciones": { "$ref": "#/$defs/noNegativo" },
+        "capturas": { "$ref": "#/$defs/noNegativo" }
+      }
+    },
+    "carrera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acarreos", "yardas"],
+      "properties": {
+        "acarreos": { "$ref": "#/$defs/noNegativo" },
+        "yardas": { "type": "integer" },
+        "touchdowns": { "$ref": "#/$defs/noNegativo" },
+        "balonesSueltos": { "$ref": "#/$defs/noNegativo" }
+      }
+    },
+    "recepcion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recepciones", "yardas"],
+      "properties": {
+        "objetivos": { "$ref": "#/$defs/noNegativo" },
+        "recepciones": { "$ref": "#/$defs/noNegativo" },
+        "yardas": { "type": "integer" },
+        "touchdowns": { "$ref": "#/$defs/noNegativo" }
+      }
+    },
+    "defensa": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tacleadas": { "$ref": "#/$defs/noNegativo" },
+        "capturas": { "type": "number", "minimum": 0 },
+        "intercepciones": { "$ref": "#/$defs/noNegativo" },
+        "pasesDefendidos": { "$ref": "#/$defs/noNegativo" },
+        "balonesForzados": { "$ref": "#/$defs/noNegativo" }
+      }
+    },
+    "pateo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "golesCampoAnotados": { "$ref": "#/$defs/noNegativo" },
+        "golesCampoIntentados": { "$ref": "#/$defs/noNegativo" },
+        "puntosExtraAnotados": { "$ref": "#/$defs/noNegativo" },
+        "puntosExtraIntentados": { "$ref": "#/$defs/noNegativo" }
+      }
+    }
+  }
+}
