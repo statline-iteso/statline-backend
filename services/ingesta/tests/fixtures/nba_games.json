@@ -1,0 +1,29 @@
+{
+  "get": "games",
+  "errors": [],
+  "results": 2,
+  "response": [
+    {
+      "id": 414001,
+      "date": "2026-11-14T00:30:00+00:00",
+      "status": { "long": "Game Finished", "short": "FT" },
+      "league": { "id": 12, "name": "NBA", "season": "2025-2026" },
+      "teams": {
+        "home": { "id": 140, "name": "Denver Nuggets", "logo": "https://media.api-sports.io/basketball/teams/140.png" },
+        "away": { "id": 145, "name": "Los Angeles Lakers", "logo": "https://media.api-sports.io/basketball/teams/145.png" }
+      },
+      "scores": { "home": { "total": 118 }, "away": { "total": 111 } }
+    },
+    {
+      "id": 414002,
+      "date": "2026-11-15T03:00:00+00:00",
+      "status": { "long": "Not Started", "short": "NS" },
+      "league": { "id": 12, "name": "NBA", "season": "2025-2026" },
+      "teams": {
+        "home": { "id": 141, "name": "Golden State Warriors", "logo": null },
+        "away": { "id": 147, "name": "Phoenix Suns", "logo": null }
+      },
+      "scores": { "home": { "total": null }, "away": { "total": null } }
+    }
+  ]
+}
