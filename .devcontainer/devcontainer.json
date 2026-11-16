@@ -1,0 +1,24 @@
+{
+  "name": "statline-backend",
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20", "pnpmVersion": "12.15.0" },
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
+    "ghcr.io/va-h/devcontainers-features/uv:1": { "version": "0.5.4" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "pnpm install && (cd services/ingesta && uv sync) && (cd services/predicciones && uv sync)",
+  "forwardPorts": [3000, 8000, 5432, 6379],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "Prisma.prisma",
+        "charliermarsh.ruff",
+        "ms-python.python",
+        "ms-python.mypy-type-checker"
+      ]
+    }
+  }
+}
