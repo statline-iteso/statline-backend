@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://statline/schemas/futbol.schema.json",
+  "title": "Métricas de jugador por partido · Liga MX",
+  "description": "Contenido de EstadisticaJugadorPartido.metricas cuando deporte = FUTBOL. Los minutos van en la columna común.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["goles", "asistencias"],
+  "properties": {
+    "goles": { "type": "integer", "minimum": 0 },
+    "asistencias": { "type": "integer", "minimum": 0 },
+    "tiros": { "type": "integer", "minimum": 0 },
+    "tirosAGol": { "type": "integer", "minimum": 0 },
+    "pases": { "type": "integer", "minimum": 0 },
+    "pasesClave": { "type": "integer", "minimum": 0 },
+    "precisionPases": { "type": "number", "minimum": 0, "maximum": 100 },
+    "regates": { "type": "integer", "minimum": 0 },
+    "entradas": { "type": "integer", "minimum": 0 },
+    "intercepciones": { "type": "integer", "minimum": 0 },
+    "faltasCometidas": { "type": "integer", "minimum": 0 },
+    "faltasRecibidas": { "type": "integer", "minimum": 0 },
+    "tarjetasAmarillas": { "type": "integer", "minimum": 0, "maximum": 2 },
+    "tarjetasRojas": { "type": "integer", "minimum": 0, "maximum": 1 },
+    "atajadas": { "type": "integer", "minimum": 0 },
+    "golesRecibidos": { "type": "integer", "minimum": 0 },
+    "calificacion": { "type": "number", "minimum": 0, "maximum": 10 }
+  }
+}

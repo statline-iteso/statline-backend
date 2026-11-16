@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://statline/schemas/basquetbol.schema.json",
+  "title": "Métricas de jugador por partido · NBA",
+  "description": "Contenido de EstadisticaJugadorPartido.metricas cuando deporte = BASQUETBOL. Los minutos van en la columna común.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["puntos", "rebotes", "asistencias"],
+  "properties": {
+    "puntos": { "type": "integer", "minimum": 0 },
+    "rebotes": { "type": "integer", "minimum": 0 },
+    "rebotesOfensivos": { "type": "integer", "minimum": 0 },
+    "rebotesDefensivos": { "type": "integer", "minimum": 0 },
+    "asistencias": { "type": "integer", "minimum": 0 },
+    "robos": { "type": "integer", "minimum": 0 },
+    "bloqueos": { "type": "integer", "minimum": 0 },
+    "perdidas": { "type": "integer", "minimum": 0 },
+    "faltas": { "type": "integer", "minimum": 0, "maximum": 6 },
+    "tirosCampoAnotados": { "type": "integer", "minimum": 0 },
+    "tirosCampoIntentados": { "type": "integer", "minimum": 0 },
+    "triplesAnotados": { "type": "integer", "minimum": 0 },
+    "triplesIntentados": { "type": "integer", "minimum": 0 },
+    "tirosLibresAnotados": { "type": "integer", "minimum": 0 },
+    "tirosLibresIntentados": { "type": "integer", "minimum": 0 },
+    "masMenos": { "type": "integer" }
+  }
+}
