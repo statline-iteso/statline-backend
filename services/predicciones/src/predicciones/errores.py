@@ -1,4 +1,4 @@
-"""Domain errors. Routes map them to HTTP codes once the endpoints exist (SL-37, SL-38)."""
+"""Domain errors. main.py maps them to HTTP codes (409, 422, 404, 500, 503)."""
 
 
 class PrediccionesError(Exception):
@@ -19,3 +19,7 @@ class ModeloNoEncontradoError(PrediccionesError):
 
 class ArtefactoInvalidoError(PrediccionesError):
     """Stored artifact bytes do not match the recorded sha256 (tampered or corrupt)."""
+
+
+class BaseDatosNoDisponibleError(PrediccionesError):
+    """PostgreSQL is not configured or cannot be reached (mapped to 503)."""
