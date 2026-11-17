@@ -22,6 +22,20 @@ class AdaptadorDeporte(ABC):
         """Provider requests made so far in this run (recorded in ejecucion_ingesta)."""
         return 0
 
+    def proveedor_efectivo(self) -> str:
+        """Providers that fed this run, e.g. "api-sports+balldontlie" (ejecucion_ingesta)."""
+        return self.proveedor
+
+    def partidos_del_dia(self, fecha: date) -> list[PartidoNorm]:
+        """Games of one day, normalized. The ejecutor only uses this and `lineas_del_partido`."""
+        return self.normalizar(self.obtener_partidos(fecha))
+
+    def lineas_del_partido(self, partido_proveedor_id: str) -> list[EstadisticaNorm]:
+        """Box-score lines of one finished game, normalized."""
+        return self.normalizar_estadisticas(
+            partido_proveedor_id, self.obtener_estadisticas(partido_proveedor_id)
+        )
+
     @abstractmethod
     def obtener_partidos(self, fecha: date) -> list[dict[str, Any]]:
         """Raw games for one day."""

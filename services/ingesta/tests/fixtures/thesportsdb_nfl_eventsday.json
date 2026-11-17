@@ -1,0 +1,62 @@
+{
+  "_nota": "Sintético: forma de la documentación de TheSportsDB v1 (eventsday.php). No es una grabación.",
+  "events": [
+    {
+      "idEvent": "2201001",
+      "idSoccerXMLTeamHome": null,
+      "idLeague": "4391",
+      "strLeague": "NFL",
+      "strSeason": "2026",
+      "strEvent": "Dallas Cowboys vs Philadelphia Eagles",
+      "strHomeTeam": "Dallas Cowboys",
+      "strAwayTeam": "Philadelphia Eagles",
+      "idHomeTeam": "134168",
+      "idAwayTeam": "134940",
+      "intHomeScore": "24",
+      "intAwayScore": "27",
+      "intRound": "10",
+      "dateEvent": "2026-11-15",
+      "strTime": "18:00:00",
+      "strTimestamp": "2026-11-15T18:00:00",
+      "strStatus": "Match Finished",
+      "strHomeTeamBadge": "https://www.thesportsdb.com/images/media/team/badge/cowboys.png",
+      "strAwayTeamBadge": null
+    },
+    {
+      "idEvent": "2201002",
+      "idLeague": "4391",
+      "strLeague": "NFL",
+      "strSeason": "2026",
+      "strHomeTeam": "Kansas City Chiefs",
+      "strAwayTeam": "Buffalo Bills",
+      "idHomeTeam": "134941",
+      "idAwayTeam": "134942",
+      "intHomeScore": null,
+      "intAwayScore": null,
+      "intRound": "10",
+      "dateEvent": "2026-11-15",
+      "strTime": "21:30:00",
+      "strStatus": "Not Started",
+      "strHomeTeamBadge": null,
+      "strAwayTeamBadge": null
+    },
+    {
+      "idEvent": "2201003",
+      "idLeague": "4391",
+      "strLeague": "NFL",
+      "strSeason": "2026",
+      "strHomeTeam": "Green Bay Packers",
+      "strAwayTeam": "Chicago Bears",
+      "idHomeTeam": "134943",
+      "idAwayTeam": "134944",
+      "intHomeScore": null,
+      "intAwayScore": null,
+      "intRound": "10",
+      "dateEvent": "2026-11-15",
+      "strTime": null,
+      "strStatus": "Postponed",
+      "strHomeTeamBadge": null,
+      "strAwayTeamBadge": null
+    }
+  ]
+}
