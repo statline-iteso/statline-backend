@@ -1,0 +1,49 @@
+{
+  "get": "games",
+  "errors": [],
+  "results": 3,
+  "response": [
+    {
+      "id": 1001,
+      "date": "2026-11-15T18:00:00+00:00",
+      "status": { "long": "Game Finished", "short": "FT" },
+      "league": { "id": 1, "name": "NFL", "season": "2026" },
+      "teams": {
+        "home": { "id": 10, "name": "Kansas City Chiefs", "logo": "https://media.api-sports.io/american-football/teams/10.png" },
+        "away": { "id": 11, "name": "Buffalo Bills", "logo": "https://media.api-sports.io/american-football/teams/11.png" }
+      },
+      "scores": {
+        "home": { "quarter_1": 7, "quarter_2": 3, "quarter_3": 7, "quarter_4": 10, "overtime": null, "total": 27 },
+        "away": { "quarter_1": 0, "quarter_2": 10, "quarter_3": 3, "quarter_4": 7, "overtime": null, "total": 20 }
+      }
+    },
+    {
+      "id": 1002,
+      "date": "2026-11-15T21:25:00+00:00",
+      "status": { "long": "3rd Quarter", "short": "Q3" },
+      "league": { "id": 1, "name": "NFL", "season": "2026" },
+      "teams": {
+        "home": { "id": 12, "name": "Dallas Cowboys", "logo": null },
+        "away": { "id": 13, "name": "Philadelphia Eagles", "logo": null }
+      },
+      "scores": {
+        "home": { "quarter_1": 0, "quarter_2": 7, "quarter_3": 7, "quarter_4": null, "overtime": null, "total": 14 },
+        "away": { "quarter_1": 3, "quarter_2": 7, "quarter_3": 0, "quarter_4": null, "overtime": null, "total": 10 }
+      }
+    },
+    {
+      "id": 1003,
+      "date": "2026-11-16T01:00:00+00:00",
+      "status": { "long": "Not Started", "short": "NS" },
+      "league": { "id": 1, "name": "NFL", "season": "2026" },
+      "teams": {
+        "home": { "id": 14, "name": "San Francisco 49ers", "logo": null },
+        "away": { "id": 15, "name": "Seattle Seahawks", "logo": null }
+      },
+      "scores": {
+        "home": { "quarter_1": null, "quarter_2": null, "quarter_3": null, "quarter_4": null, "overtime": null, "total": null },
+        "away": { "quarter_1": null, "quarter_2": null, "quarter_3": null, "quarter_4": null, "overtime": null, "total": null }
+      }
+    }
+  ]
+}

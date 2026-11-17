@@ -1,5 +1,6 @@
 """Registry: one adapter per sport. The CronJob passes the sport name on the command line."""
 
+from ingesta.adaptadores.americano import AdaptadorAmericano
 from ingesta.adaptadores.api_sports import ClienteApiSports
 from ingesta.adaptadores.base import AdaptadorDeporte
 from ingesta.adaptadores.basquetbol import AdaptadorBasquetbol
@@ -19,7 +20,8 @@ def crear_adaptador(deporte: Deporte, settings: Settings) -> AdaptadorDeporte:
 
     if deporte is Deporte.BASQUETBOL:
         return AdaptadorBasquetbol(cliente("basketball"), settings.temporada_basquetbol)
-    # TODO(SL-18): AdaptadorAmericano (api-american-football, league 1).
+    if deporte is Deporte.AMERICANO:
+        return AdaptadorAmericano(cliente("american-football"), settings.temporada_americano)
     # TODO(SL-17): AdaptadorFutbol (api-football, league 262).
     # TODO(SL-20): fallbacks balldontlie.io (NBA) and TheSportsDB (NFL, Liga MX).
     raise NotImplementedError(f"adaptador para {deporte} pendiente")

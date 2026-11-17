@@ -20,6 +20,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-12 | 2026-11-16 | Catalog writes are ADMIN-only; ingestion is the normal writer | Decided |
 | D-13 | 2026-11-16 | Prisma CLI is a runtime dependency (initContainer runs `migrate deploy`) | Decided |
 | D-14 | 2026-11-16 | Pending predicciones routes answer 501 with the issue id | Decided (temporary) |
+| D-15 | 2026-11-16 | NFL adapter (api-american-football, league 1) built from API-Sports documentation, not from a live response | Decided (unverified) |
 
 ## 2. Details
 
@@ -29,6 +30,14 @@ One migration history, applied by the api initContainer. The ingesta repository'
 ### D-05 · JSONB instead of tables per sport
 Cross-sport queries (a player's lines, a game's box score) stay one table; sport-specific aggregation uses `(metricas->>'puntos')::int`. The engine doesn't validate JSONB shape, hence D-07 and strict schemas.
 
+### D-15 · NFL field mapping from documentation (SL-18)
+`AdaptadorAmericano` maps API-Sports american-football games and player statistics to `schemas/americano.schema.json`. No API key was available during development, so the fixtures in `tests/fixtures/nfl_*.json` follow the documented shapes and are **not** a recording. The assumptions to confirm on the first real run:
+- Player lines come as `groups[].statistics[]` with `name`/`value` pairs, grouped as Passing, Rushing, Receiving, Defensive (or Defense) and Kicking; `completions/attempts`, `field goals` and `extra points` are `"made/attempts"` strings.
+- Game status codes (`NS`, `Q1`–`Q4`, `OT`, `HT`, `FT`, `AOT`, `PST`, `CANC`, …) and `scores.<side>.total`.
+- `player.position` is optional and becomes `jugador.posicion`.
+
+Unknown stat names are ignored and unparsable values count as 0, so a wrong name shows up as zeros rather than a failed run. Check a real `/games/statistics/players` response before trusting NFL numbers.
+
 ### D-09 · Express 4 and CommonJS
 The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test configuration; async errors are forwarded with a small `ah()` wrapper.
 
@@ -36,6 +45,7 @@ The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test con
 
 - `/api/partidos?fecha=` filters a UTC day; a 9 pm Mexico game shows up on the next UTC date.
 - Box-score field names from api-basketball were mapped from documentation and recorded fixtures; confirm against a live response once a key is available.
+- NFL field names are documentation-based (D-15) and `partido.jornada` stays empty because the provider's week labels are not a clean number.
 - No rate limiting until SL-31.
 
 ## 4. Future work
