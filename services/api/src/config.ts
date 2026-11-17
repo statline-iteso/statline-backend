@@ -14,6 +14,7 @@ const ConfigSchema = z.object({
   CACHE_TTL_S: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_LOGIN_PER_MIN: z.coerce.number().int().positive().default(10),
+  SCHEMAS_DIR: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 });
 
