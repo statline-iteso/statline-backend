@@ -63,6 +63,7 @@ def test_corrida_exitosa_guarda_partidos_y_solo_box_scores_de_finales(schemas_di
         "exitosa": True,
         "registros": 4,
         "peticiones": 2,
+        "proveedor": "api-sports",
         "error": None,
     }
 

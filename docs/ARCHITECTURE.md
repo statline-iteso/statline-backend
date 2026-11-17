@@ -67,8 +67,12 @@ JWT HS256 with separate secrets for access and refresh tokens. Claims: `sub` (us
 - `adaptadores/api_sports.py` — shared client: `x-apisports-key`, retries on 429/5xx with exponential backoff, a per-run request budget (`API_SPORTS_DAILY_QUOTA`, default 95 of the free plan's ~100/day).
 - `adaptadores/basquetbol.py` — NBA (league 12). pandas flattens box-score lines, drops DNPs and maps provider fields to schema keys.
 - `adaptadores/americano.py` — NFL (league 1, api-american-football). Regroups the per-team `groups[].players[].statistics[]` payload by player and category (`"12/20"` made/attempts strings, `-` and nulls count as 0), drops players without a mapped category, maps to the `pase`/`carrera`/`recepcion`/`defensa`/`pateo` groups. Field names are from documentation (D-15), not yet checked against a live response.
+- `adaptadores/balldontlie.py` — NBA fallback (balldontlie.io API v1; `/games?dates[]`, `/stats?game_ids[]`, cursor pagination). Same normalized output as `basquetbol.py`, ids namespaced `balldontlie:`. Needs `BALLDONTLIE_API_KEY`. D-18.
+- `adaptadores/thesportsdb.py` — NFL (league 4391) and Liga MX (league 4350) fallback on TheSportsDB v1 (`eventsday.php`). Games and scores only: no player box scores on the free tier. Ids namespaced `thesportsdb:`. D-18.
+- `adaptadores/respaldo.py` — HTTP client for the fallbacks (retries 429/5xx/network, request counter, Retry-After) and cursor pagination. Exhausted retries raise `ProveedorCaidoError`.
+- `adaptadores/con_respaldo.py` — `AdaptadorConRespaldo` wraps the API-Sports adapter with one fallback. On `CuotaAgotadaError` or `ProveedorCaidoError` it switches to the fallback for the rest of the run. `ejecucion_ingesta.proveedor` records the providers used (`api-sports+balldontlie`). D-17. `crear_adaptador` returns it only when `FALLBACK_HABILITADO` is true and a fallback is configured (NBA needs `BALLDONTLIE_API_KEY`).
 - `adaptadores/futbol.py` — Liga MX (api-football v3, league 262, `/fixtures` and `/fixtures/players`). Plain Python walks the nested team → players → statistics[0] payload, maps the fixture status codes, parses `league.round` into `jornada` and keeps nulls out of `metricas` (required keys default to 0). Field mapping built from the documentation, see D-16.
-- `ejecutor.py` — one run: record `EN_CURSO`, walk each day of the range, upsert games, fetch box scores only for `FINALIZADO` games, validate each line (invalid lines are skipped and counted), finish with `EXITOSA`/`FALLIDA`. Quota exhaustion keeps what was stored.
+- `ejecutor.py` — one run (uses `partidos_del_dia` / `lineas_del_partido`, which the composite overrides): record `EN_CURSO`, walk each day of the range, upsert games, fetch box scores only for `FINALIZADO` games, validate each line (invalid lines are skipped and counted), finish with `EXITOSA`/`FALLIDA`. Quota exhaustion keeps what was stored.
 - `repositorio.py` — psycopg upserts on the unique keys of §2, one transaction per game and per line.
 - `cli.py` — `ingesta run <deporte> [--desde] [--hasta]` (defaults: yesterday and today, UTC); exit 1 on failure.
 
@@ -82,7 +86,7 @@ FastAPI app with `/healthz`, `/readyz`, `/metrics`, and the request contract (`s
 
 ## 7. Configuration
 
-All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`.
+All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY`. Ingesta fallback settings: `FALLBACK_HABILITADO` (default `true`), `THESPORTSDB_API_KEY` (default `3`, the public test key; not secret).
 
 ## 8. Deployment contract for the infra chart
 
@@ -94,8 +98,8 @@ All services read environment variables (see `.env.example`). Secrets: `DATABASE
 | Liveness / readiness | `/healthz` / `/readyz` | `/healthz` / `/readyz` | `/healthz` / `/readyz` (serve) |
 | Metrics | `/metrics` | `/metrics` | `/metrics` (serve) |
 | User | `node` (1000) | 10001 | 10001 |
-| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
-| Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA`, `FALLBACK_HABILITADO`, `THESPORTSDB_API_KEY` |
+| Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (Key Vault secret `balldontlie-api-key`, to be created by statline-infra; optional, empty disables the NBA fallback) |
 | initContainer | same image: `["node_modules/.bin/prisma","migrate","deploy"]` | — | — |
 | Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (PVC or emptyDir) | `/tmp` |
 

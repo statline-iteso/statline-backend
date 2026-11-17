@@ -292,7 +292,10 @@ def test_par_de_intentos(valor: Any, esperado: tuple[int, int]) -> None:
 
 def test_crear_adaptador_americano_usa_la_temporada_de_settings() -> None:
     settings = Settings(
-        database_url="postgresql://x", api_sports_key="clave", temporada_americano="2027"
+        database_url="postgresql://x",
+        api_sports_key="clave",
+        temporada_americano="2027",
+        fallback_habilitado=False,
     )
     adaptador_creado = crear_adaptador(Deporte.AMERICANO, settings)
     assert isinstance(adaptador_creado, AdaptadorAmericano)

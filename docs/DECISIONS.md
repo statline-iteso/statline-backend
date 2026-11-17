@@ -22,6 +22,8 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-14 | 2026-11-16 | Pending predicciones routes answer 501 with the issue id | Decided (temporary) |
 | D-15 | 2026-11-16 | NFL adapter (api-american-football, league 1) built from API-Sports documentation, not from a live response | Decided (unverified) |
 | D-16 | 2026-11-16 | Liga MX (api-football, league 262) mapped from the provider documentation; unverified against a live response | Decided (limitation) |
+| D-17 | 2026-11-16 | Fallback providers (balldontlie for NBA, TheSportsDB for NFL and Liga MX) take over for the rest of a run when API-Sports is out of quota or down; duplicates across providers are not merged | Decided (limitation) |
+| D-18 | 2026-11-16 | balldontlie and TheSportsDB mappings built from their documentation, not from live responses | Decided (unverified) |
 
 ## 2. Details
 
@@ -40,6 +42,24 @@ Cross-sport queries (a player's lines, a game's box score) stay one table; sport
 
 Unknown stat names are ignored and unparsable values count as 0, so a wrong name shows up as zeros rather than a failed run. Check a real `/games/statistics/players` response before trusting NFL numbers.
 
+### D-17 · Fallback providers and duplicate games (SL-20)
+When API-Sports raises `CuotaAgotadaError` (daily budget) or `ProveedorCaidoError` (5xx, 429 or network error still failing after the retries), `AdaptadorConRespaldo` switches the run to the fallback for every later call. A 4xx (bad key or parameter) does not switch: it fails the run, as before. The run records the providers that fed it in `ejecucion_ingesta.proveedor` (`api-sports+balldontlie`) and logs the switch.
+
+Decisions:
+- **Liga stays the primary's.** The seeded `liga` rows are keyed on `api-sports`, so the fallback writes into the API-Sports league row. No seed change.
+- **Ids are namespaced** `<proveedor>:<id>` for games, teams and players of the fallbacks. Without it a balldontlie game 1000 would silently overwrite an API-Sports game 1000 through `partido(liga_id, proveedor_id)`. Namespacing prevents that overwrite; it does not merge the same real game (below).
+- **No cross-provider matching.** Matching by date and team names was rejected: team names and dates (UTC vs local day) are not verified against live data, and a wrong merge would corrupt standings silently. The fallback is kept simple and its limitation is explicit.
+- **Box scores follow the game.** Fallback games fetch stats from the fallback. A game fetched from API-Sports before a switch cannot be looked up in the fallback; its row is stored, its box score is skipped with a warning.
+- **TheSportsDB free tier has no player box scores.** NFL and Liga MX runs that switch store games and scores only.
+
+Known consequence (inevitable with the current ids): the default CronJob window is yesterday and today. If a day is ingested from the fallback and API-Sports answers the next day, the same game is stored twice (two `partido` rows, two `equipo` rows for the same club, and players split across two `jugador` rows). Standings and form would count the game twice. Mitigation options for later, once live ids are checked: a `partido_alias(proveedor, proveedor_id → partido_id)` table, or a canonical team table with a verified name mapping. Until then, do not rely on fallback data for standings; the `proveedor` column on each run shows when it happened.
+
+### D-18 · balldontlie and TheSportsDB mappings (SL-20)
+`adaptadores/balldontlie.py` (NBA, `/games?dates[]`, `/stats?game_ids[]`, cursor pagination) and `adaptadores/thesportsdb.py` (NFL league 4391, Liga MX league 4350, `eventsday.php`) were written from the providers' documentation. The fixtures in `tests/fixtures/balldontlie_*.json` and `thesportsdb_*.json` are synthetic and shaped like those responses. Unverified points to confirm on a first live call:
+- balldontlie: `status` strings ("Scheduled", tip-off time, "Final", "Final/OT"), the stat field names (`pts`, `reb`, `fg3m`, …), `min` as "mm:ss", and the `datetime` field in UTC.
+- TheSportsDB: `strStatus` values, `strTime` taken as UTC, `intRound` as the jornada.
+- balldontlie needs a key (`BALLDONTLIE_API_KEY`); without it the NBA fallback is disabled and NBA behaves as before. TheSportsDB uses its public test key `3` by default.
+
 ### D-09 · Express 4 and CommonJS
 The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test configuration; async errors are forwarded with a small `ah()` wrapper.
 
@@ -51,6 +71,8 @@ The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test con
 - Liga MX (D-16): the api-football field mapping, the status codes and the `round` → `jornada` parsing come from the v3 documentation. The fixtures in `services/ingesta/tests/fixtures/ligamx_*.json` are synthetic, shaped like that documentation (player and club names are invented). Confirm the field names, that `passes.accuracy` is a count of accurate passes (stored as a percentage of `passes.total`), the string-typed `games.rating`, and the position values against a live response once a key is available.
 - Liga MX metrics: a provider null on a required metric (`goles`, `asistencias`) is stored as 0, a null on an optional metric is left out of `metricas`. Squad players with null minutes (never on the pitch) are not stored.
 - No rate limiting until SL-31.
+- Fallback duplicates (D-17): the same real game ingested from API-Sports and from a fallback is stored twice, and so are its teams and players. Fallback data should not feed standings until a merge exists.
+- Fallback box scores (D-17): NFL and Liga MX fallback runs store no player stats.
 
 ## 4. Future work
 

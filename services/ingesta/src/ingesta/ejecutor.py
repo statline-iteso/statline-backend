@@ -1,7 +1,8 @@
 """One ingestion run: games of a date range → box scores of finished games → PostgreSQL.
 
 Every run is recorded in `ejecucion_ingesta` (EN_CURSO → EXITOSA | FALLIDA), including the number
-of provider requests it used, so the quota can be audited from the API (/api/ingestas).
+of provider requests it used and the providers that fed it (a fallback shows as "a+b"), so the quota
+can be audited from the API (/api/ingestas).
 """
 
 import logging
@@ -42,13 +43,12 @@ def ejecutar(
         liga_id = repo.liga_id(adaptador.deporte, adaptador.proveedor, adaptador.proveedor_liga_id)
         dia = desde
         while dia <= hasta:
-            for partido in adaptador.normalizar(adaptador.obtener_partidos(dia)):
+            for partido in adaptador.partidos_del_dia(dia):
                 partido_id = repo.guardar_partido(liga_id, partido)
                 partidos += 1
                 if partido.estatus is not EstatusPartido.FINALIZADO:
                     continue
-                crudas = adaptador.obtener_estadisticas(partido.proveedor_id)
-                for linea in adaptador.normalizar_estadisticas(partido.proveedor_id, crudas):
+                for linea in adaptador.lineas_del_partido(partido.proveedor_id):
                     try:
                         validar_metricas(schemas_dir, adaptador.deporte, linea.metricas)
                     except MetricasInvalidasError as err:
@@ -72,6 +72,7 @@ def ejecutar(
         exitosa=exitosa,
         registros=partidos + estadisticas,
         peticiones=adaptador.peticiones_usadas(),
+        proveedor=adaptador.proveedor_efectivo(),
         error=error,
     )
     return ResultadoEjecucion(ejecucion_id, exitosa, partidos, estadisticas, descartadas, error)
