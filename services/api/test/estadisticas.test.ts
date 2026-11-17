@@ -234,6 +234,16 @@ describe("/api/estadisticas writes", () => {
 });
 
 describe("POST /api/estadisticas/lote", () => {
+  it("answers 413 above the 1 MB body limit", async () => {
+    const { app } = buildApp();
+    const res = await request(app)
+      .post("/api/estadisticas/lote")
+      .set("Authorization", bearer("ADMIN"))
+      .send({ x: "a".repeat(1_100_000) });
+    expect(res.status).toBe(413);
+    expect(res.body.error.code).toBe("PAYLOAD_TOO_LARGE");
+  });
+
   it("is ADMIN only", async () => {
     const { app, prisma } = buildApp();
     const res = await request(app)
