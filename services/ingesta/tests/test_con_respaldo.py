@@ -7,6 +7,7 @@ import respx
 from conftest import cargar
 
 from ingesta.adaptadores import crear_adaptador
+from ingesta.adaptadores.americano import AdaptadorAmericano
 from ingesta.adaptadores.api_sports import (
     ApiSportsError,
     ClienteApiSports,
@@ -201,8 +202,18 @@ def test_corrida_real_pasa_a_balldontlie_tras_error_persistente_5xx(schemas_dir:
 
 
 def _settings(**kw: Any) -> Settings:
-    base: dict[str, Any] = {"database_url": "postgresql://x", "api_sports_key": "clave"}
+    base: dict[str, Any] = {
+        "database_url": "postgresql://x",
+        "api_sports_key": "clave",
+        "fallback_habilitado": True,
+    }
     return Settings(**(base | kw))  # type: ignore[arg-type]
+
+
+def test_respaldo_apagado_por_defecto() -> None:
+    settings = Settings(database_url="postgresql://x", api_sports_key="clave")  # type: ignore[arg-type]
+    assert settings.fallback_habilitado is False
+    assert isinstance(crear_adaptador(Deporte.AMERICANO, settings), AdaptadorAmericano)
 
 
 def test_crear_adaptador_sin_clave_balldontlie_no_tiene_respaldo_nba() -> None:

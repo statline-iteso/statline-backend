@@ -202,7 +202,7 @@ No database in unit tests: `tests/fabrica.py` generates deterministic synthetic 
 All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`. api Redis and limit settings (not secret): `REDIS_URL` (optional; unset = no Redis), `CACHE_TTL_S` (60), `RATE_LIMIT_PER_MIN` (300), `RATE_LIMIT_LOGIN_PER_MIN` (10).
 
 `SCHEMAS_DIR` (api and ingesta) is the directory with `<deporte>.schema.json`. Unset in the api, it resolves to the repo's `schemas/`; the api image sets `/app/schemas`.
-All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY`. Ingesta fallback settings: `FALLBACK_HABILITADO` (default `true`), `THESPORTSDB_API_KEY` (default `3`, the public test key; not secret).
+All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY`. Ingesta fallback settings: `FALLBACK_HABILITADO` (default `false`; mappings unverified live), `THESPORTSDB_API_KEY` (default `3`, the public test key; not secret).
 
 ## 8. Deployment contract for the infra chart
 

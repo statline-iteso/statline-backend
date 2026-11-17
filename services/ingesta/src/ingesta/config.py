@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     api_sports_daily_quota: int = 95
     # Fallback providers (SL-20, D-17). balldontlie is a secret (Key Vault `balldontlie-api-key`);
     # without a key the NBA fallback is disabled. TheSportsDB "3" is its public free test key.
-    fallback_habilitado: bool = True
+    # Off by default: the fallback field mappings are unverified against the live APIs (D-17).
+    fallback_habilitado: bool = False
     balldontlie_api_key: SecretStr = Field(
         default=SecretStr(""), description="balldontlie.io key; empty disables the NBA fallback"
     )
