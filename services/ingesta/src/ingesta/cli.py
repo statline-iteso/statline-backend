@@ -10,6 +10,7 @@
 
 import argparse
 import logging
+import os
 import sys
 from datetime import UTC, date, datetime, timedelta
 
@@ -94,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
             "seed-demo escribe datos sintéticos en la base; agrega --confirmar para ejecutarlo"
         )
         return 2
+    if args.comando == "seed-demo":
+        os.environ.setdefault("API_SPORTS_KEY", "demo")  # synthetic data never calls the provider
     settings = Settings()  # type: ignore[call-arg]  # filled from the environment
 
     if args.comando == "serve":

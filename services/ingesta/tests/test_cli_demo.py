@@ -111,3 +111,11 @@ def test_semilla_y_fecha_de_referencia_se_pasan_al_generador(
     assert capturados[0]["dias"] == 3
     assert isinstance(capturados[0]["hoy"], date)
     assert capturados[0]["temporada"] == "2026"
+
+
+def test_seed_demo_no_requiere_api_sports_key(
+    monkeypatch: pytest.MonkeyPatch, entorno: None
+) -> None:
+    monkeypatch.delenv("API_SPORTS_KEY")
+    conectar_con(monkeypatch, RepoFalso())
+    assert cli.main(["seed-demo", "--confirmar", "--deportes", "futbol", "--dias", "3"]) == 0
