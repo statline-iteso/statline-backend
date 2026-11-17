@@ -184,7 +184,7 @@ _SQL_PRONOSTICOS_RESUELTOS = """
 SELECT pp.prob_local, pp.prob_empate, pp.prob_visita, p.marcador_local, p.marcador_visita
 FROM pronostico_partido pp
 JOIN partido p ON p.id = pp.partido_id
-WHERE pp.modelo_id = %s::uuid AND p.estatus = 'FINALIZADO'
+WHERE pp.modelo_id = %s::uuid AND p.estatus = 'FINALIZADO' AND pp.generado_en < p.fecha
   AND p.marcador_local IS NOT NULL AND p.marcador_visita IS NOT NULL
 """
 
@@ -194,7 +194,7 @@ FROM proyeccion_jugador pj
 JOIN partido p ON p.id = pj.partido_id
 JOIN estadistica_jugador_partido e
   ON e.partido_id = pj.partido_id AND e.jugador_id = pj.jugador_id
-WHERE pj.modelo_id = %s::uuid AND p.estatus = 'FINALIZADO'
+WHERE pj.modelo_id = %s::uuid AND p.estatus = 'FINALIZADO' AND pj.generado_en < p.fecha
 """
 
 

@@ -66,7 +66,7 @@ def pronosticos_para(
     if objetivo.empty:
         return []
     combinado = pd.concat([historial, programados], ignore_index=True)
-    features = features_partidos(combinado)
+    features = features_partidos(combinado, ventana=bundle.ventana)
     salida = predecir_resultado(bundle, features.loc[objetivo["partido_id"].tolist()])
     filas: list[dict[str, Any]] = []
     for partido_id, fila in salida.iterrows():
@@ -118,7 +118,7 @@ def proyecciones_para(
     if proximos.empty:
         return []
     consultas = proximos[["jugador_id", "equipo_id", "local_id", "visita_id", "fecha"]]
-    features = features_jugadores(historial, consultas, bundle.objetivos)
+    features = features_jugadores(historial, consultas, bundle.objetivos, ventana=bundle.ventana)
     salida = predecir_jugador(bundle, features)
     valores = salida.loc[:, list(bundle.objetivos)].round(2)
     filas: list[dict[str, Any]] = []

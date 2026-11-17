@@ -8,7 +8,7 @@ import json
 import os
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import psycopg
@@ -177,7 +177,7 @@ def _programar(conn: psycopg.Connection[object], n: int) -> list[str]:
                 LIGA_ID,
                 equipos[i % len(equipos)],
                 equipos[(i + 1) % len(equipos)],
-                datetime(2026, 3, 1 + i, 20, tzinfo=UTC),
+                datetime.now(UTC) + timedelta(days=30 + i),  # future: forecasts precede kickoff
                 f"demo-programado-{i}",
             ),
         )
@@ -233,6 +233,14 @@ def test_http_reentrena_genera_y_mide_precision(
     assert 0.0 <= cuerpo["precision"]["accuracy"] <= 1.0
     assert cuerpo["precision"]["logLoss"] is not None
     assert cuerpo["modelo"]["version"].endswith("-synthetic")
+
+    # A forecast stamped after its game started is leakage and must not count.
+    conn.execute(
+        "UPDATE pronostico_partido SET generado_en = (SELECT fecha FROM partido p"
+        " WHERE p.id = partido_id) + interval '1 hour'"
+    )
+    tarde = cliente.get("/precision", params={"deporte": "BASQUETBOL", "tipo": "RESULTADO_PARTIDO"})
+    assert tarde.json()["precision"]["n"] == 0
 
 
 def test_http_proyecciones_y_precision_de_jugadores(
