@@ -272,10 +272,25 @@ model ModeloPrediccion {
   entrenadoEn   DateTime            @default(now()) @map("entrenado_en")
   pronosticos   PronosticoPartido[]
   proyecciones  ProyeccionJugador[]
+  artefacto     ModeloArtefacto?
 
   @@unique([deporte, tipo, version])
   @@index([deporte, tipo, activo])
   @@map("modelo_prediccion")
+}
+
+/// 10b · ModeloArtefacto: bytes del modelo serializado (joblib). Va en Postgres para que todas
+/// las réplicas de predicciones lean el mismo artefacto. ModeloPrediccion.artefactoUri = db://<id>.
+model ModeloArtefacto {
+  id          String           @id @default(uuid()) @db.Uuid
+  modeloId    String           @unique @map("modelo_id") @db.Uuid
+  contenido   Bytes
+  sha256      String
+  tamanoBytes Int              @map("tamano_bytes")
+  creadoEn    DateTime         @default(now()) @map("creado_en")
+  modelo      ModeloPrediccion @relation(fields: [modeloId], references: [id], onDelete: Cascade)
+
+  @@map("modelo_artefacto")
 }
 
 /// 11 · Alerta: disparadores por lesión, umbral o inicio de partido.
