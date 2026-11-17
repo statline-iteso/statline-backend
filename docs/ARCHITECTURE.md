@@ -149,6 +149,6 @@ All services read environment variables (see `.env.example`). Secrets: `DATABASE
 | ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
 | Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY` |
 | initContainer | same image: `["node_modules/.bin/prisma","migrate","deploy"]` | — | — |
-| Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (PVC or emptyDir) | `/tmp` |
+| Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (artifact cache, default `/tmp/statline-modelos`; emptyDir is enough, Postgres is the source of truth) | `/tmp` |
 
 Seasons in `TEMPORADA_*` must match the seeded `liga.temporada` values (`2025-2026`, `2026`, `2026`). Exit code ≠ 0 from `ingesta run` marks the Job failed.

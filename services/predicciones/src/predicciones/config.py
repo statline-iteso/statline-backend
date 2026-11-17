@@ -5,6 +5,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
 
     database_url: str = ""
-    # Trained artifacts (joblib). ModeloPrediccion.artefacto_uri points inside this directory.
-    artefactos_dir: str = "/models"
+    # Local cache of model artifacts (joblib, verified by sha256). Source of truth is Postgres.
+    artefactos_dir: str = "/tmp/statline-modelos"
     log_level: str = "info"

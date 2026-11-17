@@ -20,6 +20,7 @@ from typing import Any
 import joblib
 import psycopg
 
+from predicciones.config import Settings
 from predicciones.datos import cargar_lineas, cargar_partidos
 from predicciones.deportes import VENTANA_DEFAULT
 from predicciones.errores import (
@@ -32,7 +33,6 @@ from predicciones.modelos.jugador import entrenar_jugador
 from predicciones.modelos.resultado import entrenar_resultado
 from predicciones.schemas import Deporte, TipoInferencia
 
-CACHE_DEFAULT = Path("/tmp/statline-modelos")
 PREFIJO_DB = "db://"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -206,9 +206,11 @@ def _leer_cache(ruta: Path, sha: str) -> bytes | None:
 
 
 def _escribir_cache(ruta: Path, datos: bytes) -> None:
-    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     temporal = ruta.with_name(f"{ruta.name}.{os.getpid()}.tmp")
-    temporal.write_bytes(datos)
+    descriptor = os.open(temporal, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "wb") as archivo:
+        archivo.write(datos)
     os.replace(temporal, ruta)
 
 
@@ -231,9 +233,13 @@ def cargar_activo(
     conn: psycopg.Connection[Any],
     deporte: Deporte,
     tipo: TipoInferencia,
-    cache_dir: Path = CACHE_DEFAULT,
+    cache_dir: Path | None = None,
 ) -> ModeloCargado:
-    """Load the active model. Bytes are cached under `cache_dir/<sha256>.joblib` and verified."""
+    """Load the active model. Bytes are cached under `cache_dir/<sha256>.joblib` and verified.
+
+    `cache_dir` defaults to the `ARTEFACTOS_DIR` setting (`/tmp/statline-modelos`).
+    """
+    cache_dir = cache_dir or Path(Settings().artefactos_dir)
     fila = conn.execute(
         "SELECT m.id::text, m.version, m.artefacto_uri, a.sha256 FROM modelo_prediccion m"
         " LEFT JOIN modelo_artefacto a ON a.modelo_id = m.id"
