@@ -90,3 +90,56 @@ export const PartidoFilterSchema = z.object({
     .optional(),
   jornada: z.coerce.number().int().positive().optional(),
 });
+
+// ── Alerta ───────────────────────────────────────────────────────────────
+export const OperadorSchema = z.enum([">", ">=", "<", "<=", "="]);
+export const CondicionSchema = z.object({
+  metrica: z.string().min(1),
+  operador: OperadorSchema,
+  valor: z.number(),
+});
+
+const ActivaField = { activa: z.boolean().optional() };
+
+const LesionSchema = z.object({
+  tipo: z.literal("LESION"),
+  jugadorId: z.string().uuid(),
+  ...ActivaField,
+});
+const InicioPartidoSchema = z.object({
+  tipo: z.literal("INICIO_PARTIDO"),
+  jugadorId: z.string().uuid().optional(),
+  equipoId: z.string().uuid().optional(),
+  ...ActivaField,
+});
+const UmbralSchema = z.object({
+  tipo: z.literal("UMBRAL"),
+  jugadorId: z.string().uuid(),
+  condicion: CondicionSchema,
+  ...ActivaField,
+});
+
+/** Discriminated on `tipo`: LESION and UMBRAL need a jugador, INICIO_PARTIDO a jugador or equipo. */
+export const CreateAlertaSchema = z
+  .discriminatedUnion("tipo", [LesionSchema, InicioPartidoSchema, UmbralSchema])
+  .superRefine((alerta, ctx) => {
+    if (alerta.tipo === "INICIO_PARTIDO" && !alerta.jugadorId && !alerta.equipoId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "INICIO_PARTIDO requiere jugadorId o equipoId",
+        path: ["jugadorId"],
+      });
+    }
+  });
+
+/** PUT accepts either only `{activa}` (toggle) or a full alerta definition that replaces it. */
+export const ActivaAlertaSchema = z.object({ activa: z.boolean() }).strict();
+export const UpdateAlertaSchema = z.union([ActivaAlertaSchema, CreateAlertaSchema]);
+
+// ── EjecucionIngesta ─────────────────────────────────────────────────────
+export const EstatusIngestaSchema = z.enum(["EN_CURSO", "EXITOSA", "FALLIDA"]);
+export const IngestaFilterSchema = z.object({
+  deporte: DeporteSchema.optional(),
+  estatus: EstatusIngestaSchema.optional(),
+});
+export const EjecutarIngestaSchema = z.object({ deporte: DeporteSchema });

@@ -35,7 +35,16 @@ Full description in infra [`docs/modelo-datos.md`](https://github.com/statline-i
 - `src/server.ts` — loads config (zod), wires Prisma, tokens and metrics, listens, drains on SIGTERM.
 - `src/lib/crud.ts` — `createCrudRouter()`: the five standard operations, pagination, validation, `writeGuard`. Each resource router registers its extra routes **before** mounting it so they win over `/:id`.
 - `src/lib/standings.ts` — pure standings and form logic.
-- `src/routes/` — `health`, `usuarios` (auth + users), `catalogo` (ligas, equipos, jugadores, partidos), `schemas` (zod).
+- `src/routes/` — `health`, `usuarios` (auth + users), `catalogo` (ligas, equipos, jugadores, partidos), `alertas`, `ingestas`, `schemas` (zod).
+
+### 3.5 Manual ingestion launcher (SL-30)
+
+`POST /api/ingestas/ejecutar` calls a `LanzadorIngesta` (`src/lib/ingesta-lanzador.ts`, injected into `createApp` as `lanzador`), chosen by `INGESTA_LANZADOR`:
+
+- `deshabilitado` (default): 503 `NOT_CONFIGURED`.
+- `kubernetes`: `src/lib/k8s.ts` calls the in-cluster API with the pod's service account (`/var/run/secrets/kubernetes.io/serviceaccount`; `https` module, because Node's fetch cannot pin the cluster CA). It GETs `cronjobs/ingesta-<deporte>` in the pod's namespace and POSTs a Job `ingesta-<deporte>-manual-<ms>` built from `spec.jobTemplate`, with an ownerReference to the CronJob (`controller: false`, so deleting the CronJob garbage-collects it). Returns 202 `{job}`. Errors: 503 `NOT_CONFIGURED` if the CronJob is missing, 503 `K8S_ERROR` for API failures.
+
+**RBAC required (infra):** the api ServiceAccount needs a namespaced `Role` with `get` on `cronjobs` and `create` on `jobs` in API group `batch`, bound by a `RoleBinding`. Nothing broader is needed.
 
 ### 3.2 Routes
 
@@ -50,8 +59,10 @@ The full table with examples is in infra [`docs/api.md`](https://github.com/stat
 | `/api/equipos` CRUD · `/:id/forma` | last 5 finished games, "G/E/P" oldest first |
 | `/api/jugadores` CRUD `?q=&deporte=` | case-insensitive name search |
 | `/api/partidos` CRUD `?fecha=&jornada=` · `/:id/boxscore` | `fecha` is a UTC day |
+| `/api/alertas` CRUD (dueño) | `usuarioId` from the JWT. Lists are scoped to the caller; ADMIN lists and reads all but changes only its own. `POST`/`PUT` validate `tipo`: `LESION` and `UMBRAL` need `jugadorId` (`UMBRAL` also `condicion: {metrica, operador: > >= < <= =, valor}`), `INICIO_PARTIDO` needs `jugadorId` or `equipoId`. Referenced jugador/equipo must exist (400 otherwise). `PUT {activa}` toggles; a full definition replaces the alert. Non-owner: 403 |
+| `/api/ingestas` `GET` (`?deporte=&estatus=`, newest first) · `GET /:id` · `DELETE /:id` · `POST /ejecutar` `{deporte}` → 202 `{job}` | ADMIN only. `ejecutar` goes through `LanzadorIngesta` (§3.5): 503 `NOT_CONFIGURED` when `INGESTA_LANZADOR=deshabilitado` |
 
-Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-31 (Redis).
 
 ### 3.3 Errors
 
@@ -92,9 +103,11 @@ All services read environment variables (see `.env.example`). Secrets: `DATABASE
 | Liveness / readiness | `/healthz` / `/readyz` | `/healthz` / `/readyz` | `/healthz` / `/readyz` (serve) |
 | Metrics | `/metrics` | `/metrics` | `/metrics` (serve) |
 | User | `node` (1000) | 10001 | 10001 |
-| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`, `INGESTA_LANZADOR` (`deshabilitado` \| `kubernetes`) | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
 | Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY` |
 | initContainer | same image: `["node_modules/.bin/prisma","migrate","deploy"]` | — | — |
 | Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (PVC or emptyDir) | `/tmp` |
+
+The api ServiceAccount needs the namespaced Role described in §3.5 when `INGESTA_LANZADOR=kubernetes`; the pod gets `KUBERNETES_SERVICE_HOST`/`PORT` and the token mount from Kubernetes.
 
 Seasons in `TEMPORADA_*` must match the seeded `liga.temporada` values (`2025-2026`, `2026`, `2026`). Exit code ≠ 0 from `ingesta run` marks the Job failed.

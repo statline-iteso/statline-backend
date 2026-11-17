@@ -10,12 +10,17 @@ import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { healthRouter } from "./routes/health";
 import { authRouter, usuariosRouter } from "./routes/usuarios";
 import { equiposRouter, jugadoresRouter, ligasRouter, partidosRouter } from "./routes/catalogo";
+import { alertasRouter } from "./routes/alertas";
+import { ingestasRouter } from "./routes/ingestas";
+import { crearLanzadorDeshabilitado, type LanzadorIngesta } from "./lib/ingesta-lanzador";
 
 export interface AppDeps {
   prisma: PrismaClient;
   tokens: TokenService;
   metrics: Metrics;
   logger: Logger;
+  /** Manual ingestion launcher; defaults to the disabled one (503). */
+  lanzador?: LanzadorIngesta;
 }
 
 /** Composition root for HTTP. server.ts wires real dependencies; tests pass fakes. */
@@ -57,8 +62,19 @@ export function createApp(deps: AppDeps): Express {
   app.use("/api/equipos", auth, equiposRouter(catalogo));
   app.use("/api/jugadores", auth, jugadoresRouter(catalogo));
   app.use("/api/partidos", auth, partidosRouter(catalogo));
-  // TODO(SL-28..SL-30): /api/estadisticas, /api/listas, /api/pronosticos, /api/proyecciones,
-  // /api/modelos, /api/alertas, /api/ingestas (docs/ARCHITECTURE.md §5).
+  app.use("/api/alertas", auth, alertasRouter({ prisma: deps.prisma }));
+  app.use(
+    "/api/ingestas",
+    auth,
+    adminOnly,
+    ingestasRouter({
+      prisma: deps.prisma,
+      adminOnly,
+      lanzador: deps.lanzador ?? crearLanzadorDeshabilitado(),
+    }),
+  );
+  // TODO(SL-28..SL-29): /api/estadisticas, /api/listas, /api/pronosticos, /api/proyecciones,
+  // /api/modelos (docs/ARCHITECTURE.md §3.2).
 
   app.use(notFoundHandler);
   app.use(errorHandler);
