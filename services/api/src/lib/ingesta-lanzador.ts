@@ -67,7 +67,10 @@ export function construirJobManual(
         "statline/origen": "manual",
         "statline/deporte": deporte.toLowerCase(),
       },
-      annotations: plantilla.metadata?.annotations,
+      annotations: {
+        ...plantilla.metadata?.annotations,
+        "cronjob.kubernetes.io/instantiate": "manual",
+      },
       ownerReferences: [
         {
           apiVersion: "batch/v1",
@@ -98,7 +101,14 @@ export function crearLanzadorKubernetes({
   return {
     async lanzar(deporte) {
       const cronName = CRONJOB_POR_DEPORTE[deporte];
-      const cronRes = await http({ method: "GET", path: `${base}/cronjobs/${cronName}` });
+      const llamar: K8sHttp = async (req) => {
+        try {
+          return await http(req);
+        } catch {
+          throw new AppError("K8S_ERROR", 503, "Kubernetes no está disponible");
+        }
+      };
+      const cronRes = await llamar({ method: "GET", path: `${base}/cronjobs/${cronName}` });
       if (cronRes.status === 404) {
         throw new AppError("NOT_CONFIGURED", 503, `CronJob ${cronName} no existe`);
       }
@@ -109,7 +119,7 @@ export function crearLanzadorKubernetes({
         throw new AppError("K8S_ERROR", 503, "Respuesta inesperada del CronJob");
       }
       const job = construirJobManual(parsed.data, deporte, ahora());
-      const jobRes = await http({ method: "POST", path: `${base}/jobs`, body: job });
+      const jobRes = await llamar({ method: "POST", path: `${base}/jobs`, body: job });
       if (jobRes.status !== 201 && jobRes.status !== 200) {
         throw new AppError("K8S_ERROR", 503, "Kubernetes rechazó crear el Job");
       }

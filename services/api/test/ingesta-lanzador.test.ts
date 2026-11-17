@@ -59,7 +59,7 @@ describe("crearLanzadorKubernetes", () => {
       metadata: {
         name: "ingesta-futbol-manual-1700000000000",
         labels: { app: "ingesta", "statline/origen": "manual", "statline/deporte": "futbol" },
-        annotations: { nota: "x" },
+        annotations: { nota: "x", "cronjob.kubernetes.io/instantiate": "manual" },
         ownerReferences: [
           {
             apiVersion: "batch/v1",
@@ -72,6 +72,19 @@ describe("crearLanzadorKubernetes", () => {
         ],
       },
       spec: { backoffLimit: 2, template: { spec: { restartPolicy: "Never" } } },
+    });
+  });
+
+  it("maps network failures to 503 K8S_ERROR", async () => {
+    const lanzador = crearLanzadorKubernetes({
+      http: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+      namespace: NS,
+    });
+    await expect(lanzador.lanzar("FUTBOL")).rejects.toMatchObject({
+      status: 503,
+      code: "K8S_ERROR",
     });
   });
 
