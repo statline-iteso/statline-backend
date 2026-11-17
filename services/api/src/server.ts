@@ -4,6 +4,7 @@ import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { createTokenService } from "./lib/auth";
 import { createMetrics } from "./lib/metrics";
+import { createPrediccionesClient } from "./lib/predicciones";
 
 const config = loadConfig();
 const logger = pino({ level: config.LOG_LEVEL });
@@ -13,6 +14,10 @@ const app = createApp({
   prisma,
   logger,
   metrics: createMetrics(),
+  predicciones: createPrediccionesClient({
+    baseUrl: config.PREDICCIONES_URL,
+    timeoutMs: config.PREDICCIONES_TIMEOUT_MS,
+  }),
   tokens: createTokenService({
     accessSecret: config.JWT_SECRET,
     refreshSecret: config.JWT_REFRESH_SECRET,

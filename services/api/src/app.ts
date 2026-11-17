@@ -10,12 +10,15 @@ import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { healthRouter } from "./routes/health";
 import { authRouter, usuariosRouter } from "./routes/usuarios";
 import { equiposRouter, jugadoresRouter, ligasRouter, partidosRouter } from "./routes/catalogo";
+import { modelosRouter, pronosticosRouter, proyeccionesRouter } from "./routes/predicciones";
+import type { PrediccionesClient } from "./lib/predicciones";
 
 export interface AppDeps {
   prisma: PrismaClient;
   tokens: TokenService;
   metrics: Metrics;
   logger: Logger;
+  predicciones: PrediccionesClient;
 }
 
 /** Composition root for HTTP. server.ts wires real dependencies; tests pass fakes. */
@@ -57,8 +60,11 @@ export function createApp(deps: AppDeps): Express {
   app.use("/api/equipos", auth, equiposRouter(catalogo));
   app.use("/api/jugadores", auth, jugadoresRouter(catalogo));
   app.use("/api/partidos", auth, partidosRouter(catalogo));
-  // TODO(SL-28..SL-30): /api/estadisticas, /api/listas, /api/pronosticos, /api/proyecciones,
-  // /api/modelos, /api/alertas, /api/ingestas (docs/ARCHITECTURE.md §5).
+  const predicciones = { prisma: deps.prisma, predicciones: deps.predicciones };
+  app.use("/api/pronosticos", auth, pronosticosRouter(predicciones));
+  app.use("/api/proyecciones", auth, proyeccionesRouter(predicciones));
+  app.use("/api/modelos", auth, modelosRouter(predicciones));
+  // TODO(SL-28, SL-30): /api/estadisticas, /api/listas, /api/alertas, /api/ingestas (§3.2).
 
   app.use(notFoundHandler);
   app.use(errorHandler);

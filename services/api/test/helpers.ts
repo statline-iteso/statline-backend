@@ -4,6 +4,7 @@ import pino from "pino";
 import { createApp } from "../src/app";
 import { createTokenService, type Rol } from "../src/lib/auth";
 import { createMetrics } from "../src/lib/metrics";
+import type { PrediccionesClient } from "../src/lib/predicciones";
 
 export const tokens = createTokenService({
   accessSecret: "test-access-secret-0123456789",
@@ -14,13 +15,15 @@ export const tokens = createTokenService({
 
 export function buildApp() {
   const prisma = mockDeep<PrismaClient>() as DeepMockProxy<PrismaClient>;
+  const predicciones = mockDeep<PrediccionesClient>() as DeepMockProxy<PrediccionesClient>;
   const app = createApp({
     prisma: prisma as unknown as PrismaClient,
     tokens,
     metrics: createMetrics(),
     logger: pino({ level: "silent" }),
+    predicciones,
   });
-  return { app, prisma };
+  return { app, prisma, predicciones };
 }
 
 export const USER_ID = "11111111-1111-4111-8111-111111111111";

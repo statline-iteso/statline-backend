@@ -19,14 +19,26 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-11 | 2026-11-16 | Separate access/refresh secrets; refresh re-reads the role | Decided |
 | D-12 | 2026-11-16 | Catalog writes are ADMIN-only; ingestion is the normal writer | Decided |
 | D-13 | 2026-11-16 | Prisma CLI is a runtime dependency (initContainer runs `migrate deploy`) | Decided |
-| D-14 | 2026-11-16 | Pending predicciones routes answer 501 with the issue id | Decided (temporary) |
+| D-14 | 2026-11-16 | Pending predicciones routes answer 501 with the issue id | Superseded by D-20 (SL-37) |
 | D-15 | 2026-11-16 | Model artifacts stored as bytea in `modelo_artefacto`, referenced as `db://<id>` | Decided |
 | D-16 | 2026-11-16 | Synthetic demo data via `ingesta seed-demo` (provider `demo`, `demo-` ids), opt-in with `--confirmar`, never in CronJobs | Decided |
 | D-17 | 2026-11-16 | Models are validated on a date-based holdout (last 20 %) and the stored bundle is fitted on the training part only | Decided |
 | D-18 | 2026-11-16 | Activation rule: a candidate is activated only if it beats its baseline and is no worse than the active model on the same metric | Decided |
 | D-19 | 2026-11-16 | Feature and target choices of the first models (windows of 10, NBA/NFL ties dropped, NFL targets by group) | Decided |
+| D-20 | 2026-11-16 | Prediction endpoints are synchronous; one autocommit connection per request; forecasts and projections are replaced per (game or player, game, model) | Decided |
+| D-21 | 2026-11-16 | predicciones responses are camelCase, requests snake_case; projection `metricas` is a flat object with dotted NFL keys | Decided |
+| D-22 | 2026-11-16 | `POST /modelos/{id}/activar` is an admin override that bypasses the D-18 baseline rule | Decided |
 
 ## 2. Details
+
+### D-20 · Synchronous prediction endpoints
+Generation, precision and training run inside the request and answer 200 with the result. There is no job queue yet: a training run longer than the api timeout returns 503 to the client while predicciones may still finish. Each request opens one psycopg connection (autocommit, `connect_timeout` 5 s) and closes it at the end; a pool is future work. Re-running generation replaces the rows of the same game (or player and game) and model in one transaction, because `pronostico_partido` and `proyeccion_jugador` have no unique key.
+
+### D-21 · Response casing and dotted metric keys
+The Node proxy passes predicciones bodies through, so predicciones answers camelCase like the rest of the public JSON (CONVENTIONS §3). Its request bodies stay snake_case; the api maps them explicitly. Projection `metricas` uses the flat dotted keys of `datos.aplanar_metricas` (`pase.yardas`) rather than nested objects: the same keys the models and the precision comparison use, and no re-nesting code on the way out. The frontend reads NFL projections with `metricas["pase.yardas"]`.
+
+### D-22 · Admin activation bypasses the baseline rule
+`POST /modelos/{id}/activar` sets the model active without the D-18 check (metric better than baseline, no worse than the active model). It exists so an admin can roll back or force a version after reviewing the metrics. The check still happens for automatic activation inside `POST /modelos/reentrenar`.
 
 ### D-02 · Prisma owns the schema
 One migration history, applied by the api initContainer. The ingesta repository's SQL is checked against the real migrated schema by the integration test in CI, so drift fails the build.
@@ -57,6 +69,9 @@ Cross-sport queries (a player's lines, a game's box score) stay one table; sport
 The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test configuration; async errors are forwarded with a small `ah()` wrapper.
 
 ## 3. Known limitations
+
+- Generated forecasts and projections use the games and lines in the database at call time; no scheduled regeneration yet (a scheduled job is future work).
+- `GET /api/pronosticos` newest-per-game uses Prisma `distinct` and counts the total by loading the distinct ids; fine for the course data volume, not for millions of rows.
 
 - `/api/partidos?fecha=` filters a UTC day; a 9 pm Mexico game shows up on the next UTC date.
 - Box-score field names from api-basketball were mapped from documentation and recorded fixtures; confirm against a live response once a key is available.

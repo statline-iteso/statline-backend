@@ -90,3 +90,36 @@ export const PartidoFilterSchema = z.object({
     .optional(),
   jornada: z.coerce.number().int().positive().optional(),
 });
+
+// ── Predicciones (SL-29) ─────────────────────────────────────────────────
+export const TipoInferenciaSchema = z.enum(["RESULTADO_PARTIDO", "PROYECCION_JUGADOR"]);
+const JornadaSchema = z.coerce.number().int().positive();
+
+export const PronosticoFilterSchema = z.object({
+  deporte: DeporteSchema.optional(),
+  jornada: JornadaSchema.optional(),
+  partidoId: z.string().uuid().optional(),
+});
+export const ProyeccionFilterSchema = z.object({
+  jornada: JornadaSchema.optional(),
+  jugadorId: z.string().uuid().optional(),
+  partidoId: z.string().uuid().optional(),
+});
+export const ModeloFilterSchema = z.object({
+  deporte: DeporteSchema.optional(),
+  tipo: TipoInferenciaSchema.optional(),
+});
+export const GenerarPronosticosSchema = z.object({
+  deporte: DeporteSchema,
+  jornada: z.number().int().positive().optional(),
+  partidoIds: z.array(z.string().uuid()).max(200).optional(),
+});
+export const GenerarProyeccionesSchema = z.object({
+  deporte: DeporteSchema,
+  jornada: z.number().int().positive().optional(),
+  jugadorIds: z.array(z.string().uuid()).max(500).optional(),
+});
+export const ReentrenarSchema = z.object({ deporte: DeporteSchema, tipo: TipoInferenciaSchema });
+/** GET /precision: the tipo is fixed per router (pronosticos vs proyecciones). */
+export const precisionSchema = <T extends string>(tipo: T) =>
+  z.object({ deporte: DeporteSchema, tipo: z.literal(tipo).default(tipo) });

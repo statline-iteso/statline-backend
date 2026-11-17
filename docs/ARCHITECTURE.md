@@ -51,8 +51,13 @@ The full table with examples is in infra [`docs/api.md`](https://github.com/stat
 | `/api/equipos` CRUD · `/:id/forma` | last 5 finished games, "G/E/P" oldest first |
 | `/api/jugadores` CRUD `?q=&deporte=` | case-insensitive name search |
 | `/api/partidos` CRUD `?fecha=&jornada=` · `/:id/boxscore` | `fecha` is a UTC day |
+| `/api/pronosticos` `?deporte=&jornada=&partidoId=` · `/:id` · `GET /precision?deporte=` · `POST /generar` (ANALISTA, ADMIN) | list = newest forecast per game (`distinct` partido); proxies to predicciones |
+| `/api/proyecciones` `?jornada=&jugadorId=&partidoId=` · `/:id` · `GET /precision?deporte=` · `POST /generar` (ANALISTA, ADMIN) | list keeps every stored projection; proxies to predicciones |
+| `/api/modelos` `?deporte=&tipo=` · `/:id` · `POST /:id/activar` (ADMIN) · `POST /reentrenar` (ADMIN) | read-only CRUD: no writes except these actions; artifact bytes never selected |
 
-Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+
+**Predicciones proxy (SL-29).** The api forwards the five predicciones calls with `PREDICCIONES_URL` and `PREDICCIONES_TIMEOUT_MS` (default 30000). Request bodies are mapped from camelCase to snake_case explicitly (`partidoIds` → `partido_ids`, `jugadorIds` → `jugador_ids`). The predicciones status and JSON body are passed through unchanged. Connection errors and timeouts answer `503 PREDICCIONES_UNAVAILABLE`; a non-JSON answer answers `502 PREDICCIONES_RESPUESTA_INVALIDA`. Errors from predicciones keep their own codes (`NO_ACTIVE_MODEL` 409, `INSUFFICIENT_DATA` 422, `DB_UNAVAILABLE` 503).
 
 ### 3.3 Errors
 
@@ -76,7 +81,22 @@ JWT HS256 with separate secrets for access and refresh tokens. Claims: `sub` (us
 
 ## 5. predicciones
 
-FastAPI app with `/healthz`, `/readyz`, `/metrics`, and the request contract (`schemas.py`). `POST /pronosticos/generar`, `/proyecciones/generar` and `/modelos/reentrenar` still answer **501**: the HTTP handlers come with SL-37/SL-38, the library below is ready for them.
+FastAPI app with `/healthz`, `/readyz`, `/metrics`, and the request contract (`schemas.py`). Requests are snake_case; **responses are camelCase** so the api proxy passes them through (D-21). Every request opens its own PostgreSQL connection in autocommit mode (D-20). Only the api reaches these routes.
+
+| Route | Request | Response (200) |
+|---|---|---|
+| `POST /pronosticos/generar` | `{deporte, jornada?, partido_ids?}` | `{deporte, modeloId, generados, pronosticos:[{id, partidoId, probLocal, probEmpate, probVisita, marcadorEsperadoLocal, marcadorEsperadoVisita}]}` |
+| `POST /proyecciones/generar` | `{deporte, jornada?, jugador_ids?}` | `{deporte, modeloId, generados, proyecciones:[{id, jugadorId, partidoId, metricas}]}` |
+| `GET /precision?deporte=&tipo=` | query | `{deporte, tipo, modelo:{id, version, nombreMetrica, metricaError}, precision}` |
+| `POST /modelos/reentrenar` | `{deporte, tipo}` | `{modeloId, version, deporte, tipo, nombreMetrica, metrica, baseline, nTrain, nTest, activado, motivo}` |
+| `POST /modelos/{id}/activar` | — | `{modeloId, activo: true}` |
+
+Errors use `{error:{code, message, details?}}`: `NO_ACTIVE_MODEL` 409 (generate or precision with no active model), `INSUFFICIENT_DATA` 422, `NOT_FOUND` 404 (unknown or non-UUID model id), `ARTEFACTO_INVALIDO` 500, `DB_UNAVAILABLE` 503, `VALIDATION_ERROR` 422.
+
+- **Generate pronosticos:** scheduled games (filtered by `partido_ids` and/or `jornada`, default all, max 500) get team features from finished games plus the scheduled ones. Forecasts are replaced per (game, model). NBA and NFL store `prob_empate = 0`.
+- **Generate proyecciones:** each player on a team of a selected game gets one row for his earliest selected game. `metricas` is a flat object keyed by the metric name, NFL groups dotted (`{"pase.yardas": 241.3}`), D-21. Re-running replaces rows per (player, game, model).
+- **Precision:** over the active model's stored rows and finished games. Outcomes: `n` (games with a class; NBA/NFL ties excluded), `aciertos`, `accuracy` (argmax), `logLoss`. Projections: `n` (player-game pairs) and `porObjetivo.<metric>` = `{n, mae}`.
+- **Synchronous:** all endpoints answer 200 after the work is done. Training (`/modelos/reentrenar`) can exceed the api timeout (30 s by default); the api then answers 503 while predicciones may still finish. Raise `PREDICCIONES_TIMEOUT_MS` for the first training run.
 
 ### 5.1 Modules (`src/predicciones/`)
 
@@ -146,7 +166,7 @@ All services read environment variables (see `.env.example`). Secrets: `DATABASE
 | Liveness / readiness | `/healthz` / `/readyz` | `/healthz` / `/readyz` | `/healthz` / `/readyz` (serve) |
 | Metrics | `/metrics` | `/metrics` | `/metrics` (serve) |
 | User | `node` (1000) | 10001 | 10001 |
-| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `PREDICCIONES_TIMEOUT_MS`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
 | Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY` |
 | initContainer | same image: `["node_modules/.bin/prisma","migrate","deploy"]` | — | — |
 | Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (artifact cache, default `/tmp/statline-modelos`; emptyDir is enough, Postgres is the source of truth) | `/tmp` |
