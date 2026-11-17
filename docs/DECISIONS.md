@@ -37,7 +37,7 @@ The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test con
 
 - `/api/partidos?fecha=` filters a UTC day; a 9 pm Mexico game shows up on the next UTC date.
 - Box-score field names from api-basketball were mapped from documentation and recorded fixtures; confirm against a live response once a key is available.
-- Liga MX (D-15): the api-football field mapping, the status codes and the `round` → `jornada` parsing come from the v3 documentation. The fixtures in `services/ingesta/tests/fixtures/ligamx_*.json` are synthetic, shaped like that documentation (player and club names are invented). Confirm the field names, the string-typed `passes.accuracy` and `games.rating`, and the position values against a live response once a key is available.
+- Liga MX (D-15): the api-football field mapping, the status codes and the `round` → `jornada` parsing come from the v3 documentation. The fixtures in `services/ingesta/tests/fixtures/ligamx_*.json` are synthetic, shaped like that documentation (player and club names are invented). Confirm the field names, that `passes.accuracy` is a count of accurate passes (stored as a percentage of `passes.total`), the string-typed `games.rating`, and the position values against a live response once a key is available.
 - Liga MX metrics: a provider null on a required metric (`goles`, `asistencias`) is stored as 0, a null on an optional metric is left out of `metricas`. Squad players with null minutes (never on the pitch) are not stored.
 - No rate limiting until SL-31.
 

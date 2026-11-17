@@ -215,7 +215,7 @@ def test_normalizar_estadisticas_mapea_metricas() -> None:
         "tirosAGol": 2,
         "pases": 32,
         "pasesClave": 2,
-        "precisionPases": 78.0,
+        "precisionPases": 78.1,  # 25 accurate of 32
         "regates": 3,
         "entradas": 1,
         "intercepciones": 1,
@@ -246,7 +246,7 @@ def test_nulos_en_requeridas_se_guardan_como_cero() -> None:
     assert medio.metricas["goles"] == 0
     assert medio.metricas["asistencias"] == 0
     assert medio.metricas["tarjetasAmarillas"] == 2
-    assert medio.metricas["precisionPases"] == 91.0
+    assert medio.metricas["precisionPases"] == 91.4
     assert medio.minutos == 78
 
 
@@ -276,7 +276,7 @@ def test_porcentajes_y_calificaciones_se_limitan_y_se_parsean() -> None:
     a, _ = adaptador()
     bloque = copy.deepcopy(cargar("ligamx_players.json")["response"][0])
     estadistica = bloque["players"][0]["statistics"][0]
-    estadistica["passes"]["accuracy"] = "78%"
+    estadistica["passes"]["accuracy"] = "78%"  # already a percentage
     estadistica["games"]["rating"] = "11.5"
     estadistica["shots"]["total"] = "-2"
     estadistica["shots"]["on"] = "abc"
@@ -294,6 +294,24 @@ def test_precision_mayor_a_cien_se_limita() -> None:
     bloque["players"][0]["statistics"][0]["passes"]["accuracy"] = 120
     ejemplo = por_nombre(a.normalizar_estadisticas("1", [bloque]), "J. Ejemplo")
     assert ejemplo.metricas["precisionPases"] == 100.0
+
+
+def test_precision_es_conteo_de_pases_acertados_entre_total() -> None:
+    a, _ = adaptador()
+    bloque = copy.deepcopy(cargar("ligamx_players.json")["response"][0])
+    pases = bloque["players"][0]["statistics"][0]["passes"]
+    pases["total"], pases["accuracy"] = 40, "30"
+    assert (
+        por_nombre(a.normalizar_estadisticas("1", [bloque]), "J. Ejemplo").metricas[
+            "precisionPases"
+        ]
+        == 75.0
+    )
+    pases["total"] = 0  # no total: the ratio is undefined, so the metric is left out
+    assert (
+        "precisionPases"
+        not in por_nombre(a.normalizar_estadisticas("1", [bloque]), "J. Ejemplo").metricas
+    )
 
 
 def test_valores_booleanos_se_tratan_como_nulos() -> None:

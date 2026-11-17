@@ -165,13 +165,31 @@ def _metricas(estadistica: dict[str, Any]) -> dict[str, Any]:
         valor = _entero(_campo(estadistica, grupo, campo))
         if valor is not None:
             metricas[clave] = valor
-    precision = _decimal(_campo(estadistica, "passes", "accuracy"))
+    precision = _precision_pases(estadistica)
     if precision is not None:
-        metricas["precisionPases"] = min(precision, 100.0)
+        metricas["precisionPases"] = precision
     calificacion = _decimal(_campo(estadistica, "games", "rating"))
     if calificacion is not None:
         metricas["calificacion"] = min(calificacion, 10.0)
     return metricas
+
+
+def _precision_pases(estadistica: dict[str, Any]) -> float | None:
+    """Pass accuracy as a 0-100 percentage.
+
+    In /fixtures/players `passes.accuracy` is the number of accurate passes (not a percentage),
+    so it is divided by `passes.total`. A value carrying "%" is taken as already a percentage.
+    """
+    bruto = _campo(estadistica, "passes", "accuracy")
+    valor = _decimal(bruto)
+    if valor is None:
+        return None
+    if isinstance(bruto, str) and bruto.strip().endswith("%"):
+        return min(valor, 100.0)
+    total = _entero(_campo(estadistica, "passes", "total"))
+    if not total:
+        return None
+    return round(min(valor / total * 100, 100.0), 1)
 
 
 def _campo(estadistica: dict[str, Any], grupo: str, campo: str) -> object:
