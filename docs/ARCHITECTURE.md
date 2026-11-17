@@ -49,9 +49,12 @@ The full table with examples is in infra [`docs/api.md`](https://github.com/stat
 | `/api/ligas` CRUD `?deporte=` · `/:id/posiciones` · `/:id/calendario` | |
 | `/api/equipos` CRUD · `/:id/forma` | last 5 finished games, "G/E/P" oldest first |
 | `/api/jugadores` CRUD `?q=&deporte=` | case-insensitive name search |
+| `/api/jugadores/:id/promedios?ultimos=` | averages per numeric metric (`metricas` JSONB), games count, avg minutes; NFL groups use dotted keys (`pase.yardas`) |
+| `/api/jugadores/:id/tendencia?metrica=&n=` | last `n` (default 10) games where the metric was recorded, oldest first; `metrica` must be numeric in the sport's schema, else 400 |
+| `/api/jugadores/comparar?ids=a,b[,c,d]` | 2–4 unique players of one sport (400 otherwise), each with ref + promedios |
 | `/api/partidos` CRUD `?fecha=&jornada=` · `/:id/boxscore` | `fecha` is a UTC day |
 
-Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+Planned: SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
 
 ### 3.3 Errors
 
@@ -92,9 +95,11 @@ All services read environment variables (see `.env.example`). Secrets: `DATABASE
 | Liveness / readiness | `/healthz` / `/readyz` | `/healthz` / `/readyz` | `/healthz` / `/readyz` (serve) |
 | Metrics | `/metrics` | `/metrics` | `/metrics` (serve) |
 | User | `node` (1000) | 10001 | 10001 |
-| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`, `SCHEMAS_DIR` (image default `/app/schemas`) | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
 | Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY` |
 | initContainer | same image: `["node_modules/.bin/prisma","migrate","deploy"]` | — | — |
 | Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (PVC or emptyDir) | `/tmp` |
+
+The api image copies `schemas/` to `/app/schemas` (the api reads metric keys from it, SL-27). Outside Docker, `SCHEMAS_DIR` defaults to the repo's `schemas/`.
 
 Seasons in `TEMPORADA_*` must match the seeded `liga.temporada` values (`2025-2026`, `2026`, `2026`). Exit code ≠ 0 from `ingesta run` marks the Job failed.

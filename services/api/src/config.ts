@@ -10,6 +10,7 @@ const ConfigSchema = z.object({
   JWT_REFRESH_TTL: z.string().default("7d"),
   PREDICCIONES_URL: z.string().url().default("http://predicciones:8000"),
   REDIS_URL: z.string().optional(),
+  SCHEMAS_DIR: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 });
 

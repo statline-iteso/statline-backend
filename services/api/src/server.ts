@@ -13,6 +13,7 @@ const app = createApp({
   prisma,
   logger,
   metrics: createMetrics(),
+  schemasDir: config.SCHEMAS_DIR,
   tokens: createTokenService({
     accessSecret: config.JWT_SECRET,
     refreshSecret: config.JWT_REFRESH_SECRET,
