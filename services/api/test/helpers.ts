@@ -2,7 +2,9 @@ import type { PrismaClient } from "@prisma/client";
 import { mockDeep, type DeepMockProxy } from "jest-mock-extended";
 import pino from "pino";
 import { createApp } from "../src/app";
+import { defaultSchemasDir } from "../src/config";
 import { createTokenService, type Rol } from "../src/lib/auth";
+import { createMetricasValidator } from "../src/lib/metricas";
 import { createMetrics } from "../src/lib/metrics";
 
 export const tokens = createTokenService({
@@ -18,6 +20,7 @@ export function buildApp() {
     prisma: prisma as unknown as PrismaClient,
     tokens,
     metrics: createMetrics(),
+    metricas: createMetricasValidator(defaultSchemasDir),
     logger: pino({ level: "silent" }),
   });
   return { app, prisma };

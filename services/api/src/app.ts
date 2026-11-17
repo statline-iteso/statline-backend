@@ -5,16 +5,21 @@ import type { Logger } from "pino";
 import type { PrismaClient } from "@prisma/client";
 import type { TokenService } from "./lib/auth";
 import type { Metrics } from "./lib/metrics";
+import type { MetricasValidator } from "./lib/metricas";
 import { requireAuth, requireRole } from "./middleware/auth";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { healthRouter } from "./routes/health";
 import { authRouter, usuariosRouter } from "./routes/usuarios";
 import { equiposRouter, jugadoresRouter, ligasRouter, partidosRouter } from "./routes/catalogo";
+import { estadisticasRouter } from "./routes/estadisticas";
+import { listasRouter } from "./routes/listas";
 
 export interface AppDeps {
   prisma: PrismaClient;
   tokens: TokenService;
   metrics: Metrics;
+  /** Validates EstadisticaJugadorPartido.metricas against schemas/<deporte>.schema.json. */
+  metricas: MetricasValidator;
   logger: Logger;
 }
 
@@ -26,7 +31,7 @@ export function createApp(deps: AppDeps): Express {
 
   app.use(helmet());
   app.use(pinoHttp({ logger: deps.logger, autoLogging: { ignore: (req) => isProbe(req.url) } }));
-  app.use(express.json({ limit: "100kb" }));
+  app.use(express.json({ limit: "1mb" })); // room for a 500-line lote
 
   app.use((req, res, next) => {
     const end = deps.metrics.httpDuration.startTimer({ method: req.method });
@@ -57,8 +62,14 @@ export function createApp(deps: AppDeps): Express {
   app.use("/api/equipos", auth, equiposRouter(catalogo));
   app.use("/api/jugadores", auth, jugadoresRouter(catalogo));
   app.use("/api/partidos", auth, partidosRouter(catalogo));
-  // TODO(SL-28..SL-30): /api/estadisticas, /api/listas, /api/pronosticos, /api/proyecciones,
-  // /api/modelos, /api/alertas, /api/ingestas (docs/ARCHITECTURE.md §5).
+  app.use(
+    "/api/estadisticas",
+    auth,
+    estadisticasRouter({ prisma: deps.prisma, adminOnly, metricas: deps.metricas }),
+  );
+  app.use("/api/listas", auth, listasRouter({ prisma: deps.prisma }));
+  // TODO(SL-29..SL-30): /api/pronosticos, /api/proyecciones, /api/modelos, /api/alertas,
+  // /api/ingestas (docs/ARCHITECTURE.md §3.2).
 
   app.use(notFoundHandler);
   app.use(errorHandler);

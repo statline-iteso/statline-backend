@@ -4,6 +4,7 @@ import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { createTokenService } from "./lib/auth";
 import { createMetrics } from "./lib/metrics";
+import { createMetricasValidator } from "./lib/metricas";
 
 const config = loadConfig();
 const logger = pino({ level: config.LOG_LEVEL });
@@ -13,6 +14,7 @@ const app = createApp({
   prisma,
   logger,
   metrics: createMetrics(),
+  metricas: createMetricasValidator(config.SCHEMAS_DIR),
   tokens: createTokenService({
     accessSecret: config.JWT_SECRET,
     refreshSecret: config.JWT_REFRESH_SECRET,

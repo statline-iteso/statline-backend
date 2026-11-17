@@ -35,7 +35,8 @@ Full description in infra [`docs/modelo-datos.md`](https://github.com/statline-i
 - `src/server.ts` — loads config (zod), wires Prisma, tokens and metrics, listens, drains on SIGTERM.
 - `src/lib/crud.ts` — `createCrudRouter()`: the five standard operations, pagination, validation, `writeGuard`. Each resource router registers its extra routes **before** mounting it so they win over `/:id`.
 - `src/lib/standings.ts` — pure standings and form logic.
-- `src/routes/` — `health`, `usuarios` (auth + users), `catalogo` (ligas, equipos, jugadores, partidos), `schemas` (zod).
+- `src/lib/metricas.ts` — `createMetricasValidator(dir)`: Ajv (2020-12) over `schemas/<deporte>.schema.json`, compiled once at boot.
+- `src/routes/` — `health`, `usuarios` (auth + users), `catalogo` (ligas, equipos, jugadores, partidos), `estadisticas` (box-score lines, batch), `listas` (watchlists), `schemas` (zod).
 
 ### 3.2 Routes
 
@@ -50,12 +51,14 @@ The full table with examples is in infra [`docs/api.md`](https://github.com/stat
 | `/api/equipos` CRUD · `/:id/forma` | last 5 finished games, "G/E/P" oldest first |
 | `/api/jugadores` CRUD `?q=&deporte=` | case-insensitive name search |
 | `/api/partidos` CRUD `?fecha=&jornada=` · `/:id/boxscore` | `fecha` is a UTC day |
+| `/api/estadisticas` CRUD `?jugadorId=&partidoId=` · `POST /lote` | reads: autenticado; writes: ADMIN. The sport comes from the partido's liga; `metricas` is validated against its schema. `POST /lote` takes a JSON array of 1–500 lines `{partidoId, jugadorId, equipoId, minutos?, metricas}`, upserts on `(partidoId, jugadorId)` in one transaction and answers `200 {procesadas, data}`. Any invalid line rejects the whole batch with 400 and `details: [{index, path, message}]`. |
+| `/api/listas` CRUD · `POST /:id/elementos` `{tipo: "JUGADOR"\|"EQUIPO", refId}` · `DELETE /:id/elementos/:ref` | owner only (usuarioId from the JWT); ADMIN can list and read all. Another user's list is 404. `:ref` is the jugador or equipo id (`refId`), not the elemento id. `GET /:id` includes `elementos`. Duplicate → 409; unknown jugador/equipo → 404. |
 
-Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
 
 ### 3.3 Errors
 
-`{ "error": { "code", "message", "details"? } }`. `AppError` → its status; `ZodError` → 400 `VALIDATION_ERROR`; Prisma `P2025` → 404, `P2002` → 409 `DUPLICATE`; anything else → 500 `INTERNAL` (logged, never echoed).
+`{ "error": { "code", "message", "details"? } }`. `AppError` → its status; `ZodError` → 400 `VALIDATION_ERROR`; Prisma `P2025` → 404, `P2002` → 409 `DUPLICATE`, `P2003` (missing reference) → 400 `INVALID_REFERENCE`; body over 1 MB → 413 `PAYLOAD_TOO_LARGE`; anything else → 500 `INTERNAL` (logged, never echoed). Metric errors use `VALIDATION_ERROR` with `details: [{path, message}]` (`path` like `metricas.puntos`).
 
 ### 3.4 Auth
 
@@ -82,6 +85,8 @@ FastAPI app with `/healthz`, `/readyz`, `/metrics`, and the request contract (`s
 
 All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`.
 
+`SCHEMAS_DIR` (api and ingesta) is the directory with `<deporte>.schema.json`. Unset in the api, it resolves to the repo's `schemas/`; the api image sets `/app/schemas`.
+
 ## 8. Deployment contract for the infra chart
 
 | | api | predicciones | ingesta |
@@ -92,7 +97,7 @@ All services read environment variables (see `.env.example`). Secrets: `DATABASE
 | Liveness / readiness | `/healthz` / `/readyz` | `/healthz` / `/readyz` | `/healthz` / `/readyz` (serve) |
 | Metrics | `/metrics` | `/metrics` | `/metrics` (serve) |
 | User | `node` (1000) | 10001 | 10001 |
-| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`; `SCHEMAS_DIR` is fixed in the image (`/app/schemas`) | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
 | Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY` |
 | initContainer | same image: `["node_modules/.bin/prisma","migrate","deploy"]` | — | — |
 | Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (PVC or emptyDir) | `/tmp` |

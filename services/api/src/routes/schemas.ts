@@ -90,3 +90,30 @@ export const PartidoFilterSchema = z.object({
     .optional(),
   jornada: z.coerce.number().int().positive().optional(),
 });
+
+// ── EstadisticaJugadorPartido ────────────────────────────────────────────
+// The sport is not an input: it is taken from the partido's liga, so a client can't send
+// metrics for one sport tagged as another.
+export const CreateEstadisticaSchema = z.object({
+  partidoId: z.string().uuid(),
+  jugadorId: z.string().uuid(),
+  equipoId: z.string().uuid(),
+  minutos: z.number().int().min(0).nullish(),
+  metricas: z.record(z.string(), z.unknown()),
+});
+export const UpdateEstadisticaSchema = CreateEstadisticaSchema.partial();
+export const EstadisticaFilterSchema = z.object({
+  jugadorId: z.string().uuid().optional(),
+  partidoId: z.string().uuid().optional(),
+});
+/** Upper bound for POST /api/estadisticas/lote (one transaction). */
+export const MAX_LOTE = 500;
+export const LoteSchema = z.array(z.unknown()).min(1).max(MAX_LOTE);
+
+// ── ListaSeguimiento ─────────────────────────────────────────────────────
+export const CreateListaSchema = z.object({ nombre: z.string().min(1).max(120) });
+export const UpdateListaSchema = CreateListaSchema.partial();
+export const ElementoListaSchema = z.object({
+  tipo: z.enum(["JUGADOR", "EQUIPO"]),
+  refId: z.string().uuid(),
+});

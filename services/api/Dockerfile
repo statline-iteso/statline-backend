@@ -29,6 +29,9 @@ ENV NODE_ENV=production PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 COPY --from=build --chown=node:node /repo/services/api/dist ./dist
+# JSON Schemas for metricas validation (D-06); SCHEMAS_DIR points here.
+COPY --chown=node:node schemas ./schemas
+ENV SCHEMAS_DIR=/app/schemas
 USER node
 EXPOSE 3000
 # Migrations run in the Deployment's initContainer (`npx prisma migrate deploy`), not here.
