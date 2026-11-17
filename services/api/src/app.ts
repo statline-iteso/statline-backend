@@ -16,6 +16,9 @@ import { authRouter, usuariosRouter } from "./routes/usuarios";
 import { equiposRouter, jugadoresRouter, ligasRouter, partidosRouter } from "./routes/catalogo";
 import { estadisticasRouter } from "./routes/estadisticas";
 import { listasRouter } from "./routes/listas";
+import { alertasRouter } from "./routes/alertas";
+import { ingestasRouter } from "./routes/ingestas";
+import { crearLanzadorDeshabilitado, type LanzadorIngesta } from "./lib/ingesta-lanzador";
 
 export interface AppDeps {
   prisma: PrismaClient;
@@ -32,6 +35,8 @@ export interface AppDeps {
   rateLimits?: { global: number; login: number };
   /** Directory with the metric JSON Schemas (SCHEMAS_DIR); defaults to the repo's schemas/. */
   schemasDir?: string;
+  /** Manual ingestion launcher; defaults to the disabled one (503). */
+  lanzador?: LanzadorIngesta;
 }
 
 /** Composition root for HTTP. server.ts wires real dependencies; tests pass fakes. */
@@ -97,8 +102,18 @@ export function createApp(deps: AppDeps): Express {
     estadisticasRouter({ prisma: deps.prisma, adminOnly, metricas: deps.metricas }),
   );
   app.use("/api/listas", auth, listasRouter({ prisma: deps.prisma }));
-  // TODO(SL-29..SL-30): /api/pronosticos, /api/proyecciones, /api/modelos, /api/alertas,
-  // /api/ingestas (docs/ARCHITECTURE.md §3.2).
+  // TODO(SL-29): /api/pronosticos, /api/proyecciones, /api/modelos (docs/ARCHITECTURE.md §3.2).
+  app.use("/api/alertas", auth, alertasRouter({ prisma: deps.prisma }));
+  app.use(
+    "/api/ingestas",
+    auth,
+    adminOnly,
+    ingestasRouter({
+      prisma: deps.prisma,
+      adminOnly,
+      lanzador: deps.lanzador ?? crearLanzadorDeshabilitado(),
+    }),
+  );
 
   app.use(notFoundHandler);
   app.use(errorHandler);
