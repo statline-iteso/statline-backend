@@ -21,6 +21,8 @@ const ConfigSchema = z.object({
   RATE_LIMIT_LOGIN_PER_MIN: z.coerce.number().int().positive().default(10),
   /** deshabilitado (default): POST /api/ingestas/ejecutar answers 503. kubernetes: creates a Job. */
   INGESTA_LANZADOR: z.enum(["deshabilitado", "kubernetes"]).default("deshabilitado"),
+  // Prefix of the ingesta CronJob names; the Helm chart names them `<release>-ingesta-<deporte>`.
+  INGESTA_CRONJOB_PREFIJO: z.string().default(""),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   /** Directory with <deporte>.schema.json files. The image sets /app/schemas. */
   SCHEMAS_DIR: z.string().min(1).default(defaultSchemasDir),

@@ -24,7 +24,9 @@ const app = createApp({
   metrics: createMetrics(),
   schemasDir: config.SCHEMAS_DIR,
   metricas: createMetricasValidator(config.SCHEMAS_DIR),
-  lanzador: crearLanzadorIngesta(config.INGESTA_LANZADOR),
+  lanzador: crearLanzadorIngesta(config.INGESTA_LANZADOR, {
+    prefijo: config.INGESTA_CRONJOB_PREFIJO,
+  }),
   predicciones: createPrediccionesClient({
     baseUrl: config.PREDICCIONES_URL,
     timeoutMs: config.PREDICCIONES_TIMEOUT_MS,
