@@ -76,7 +76,57 @@ JWT HS256 with separate secrets for access and refresh tokens. Claims: `sub` (us
 
 ## 5. predicciones
 
-FastAPI app with `/healthz`, `/readyz`, `/metrics`, and the request contract (`schemas.py`). `POST /pronosticos/generar`, `/proyecciones/generar` and `/modelos/reentrenar` answer **501** until SL-34..SL-38. Planned design: features from PostgreSQL (rolling averages, home/away, recent form), joblib artifacts stored in `modelo_artefacto` (`artefacto_uri = db://<id>`, so every replica loads the same bytes; `ARTEFACTOS_DIR` is only a local cache), a `modelo_prediccion` row per trained version, inference with the one active model per (deporte, tipo).
+FastAPI app with `/healthz`, `/readyz`, `/metrics`, and the request contract (`schemas.py`). `POST /pronosticos/generar`, `/proyecciones/generar` and `/modelos/reentrenar` still answer **501**: the HTTP handlers come with SL-37/SL-38, the library below is ready for them.
+
+### 5.1 Modules (`src/predicciones/`)
+
+| Module | Responsibility |
+|---|---|
+| `datos.py` | The only SQL (parameterized). Finished games, scheduled games, player lines with the metrics flattened (`pase.yardas`). `es_demo` flags games from the demo seeder (`partido.proveedor_id LIKE 'demo-%'`, D-16). |
+| `features.py` | Pure pandas/bisect functions. `features_partidos` (team), `features_jugadores` (player). |
+| `deportes.py` | Outcome classes per sport, target metrics per sport, `VENTANA_DEFAULT = 10`. |
+| `modelos/base.py` | `ResultadoEntrenamiento` (metric, baseline, `supera_baseline`) and the time holdout `particion_temporal`. |
+| `modelos/resultado.py` | `entrenar_resultado`, `predecir_resultado`: outcome model. |
+| `modelos/jugador.py` | `entrenar_jugador`, `predecir_jugador`: player projections. |
+| `registro.py` | joblib bytes, sha256, `registrar`, `activar`, `entrenar_y_registrar`, `cargar_activo`. |
+| `errores.py` | `DatosInsuficientesError`, `SinModeloActivoError`, `ModeloNoEncontradoError`, `ArtefactoInvalidoError`. |
+
+### 5.2 Team features (`features_partidos`)
+
+For each game, the home team and the away team each get features computed only from their finished games **strictly before** the game's date (no leakage; a game's own result never enters its features):
+
+| Feature | Definition |
+|---|---|
+| `puntos_favor`, `puntos_contra` | mean points scored/allowed over the last N = 10 games |
+| `tasa_victorias` | win rate over the last N games |
+| `tasa_victorias_local`, `tasa_victorias_visita` | win rate over the last N home / away games (the home/away split) |
+| `dias_descanso` | days since the last game, capped at 14 (NaN without history) |
+
+The vector is `local_<rasgo>`, `visita_<rasgo>` and `dif_<rasgo>` (local minus visita). NaN (no history) is imputed inside each pipeline.
+
+### 5.3 Player features (`features_jugadores`)
+
+Per player line, from that player's last N = 10 lines before the date: `prom_<obj>` (rolling average of each target), `minutos_prom`, `es_local` (home flag), and `rival_<obj>_permitido`: the mean over the rival's last N games of what it allowed (the rival's total of each metric in each of those games, i.e. the opponents' totals).
+
+### 5.4 Models and targets
+
+| Tipo | Model | Targets / classes | Baseline | Metric (lower is better) |
+|---|---|---|---|---|
+| `RESULTADO_PARTIDO` | `Pipeline(SimpleImputer, StandardScaler, LogisticRegression)` + two `PoissonRegressor` (expected score) | NBA and NFL: `L`, `V` (ties dropped). Futbol: `L`, `E`, `V` | class priors of the training part | `log_loss` on the last 20 % of games by date |
+| `PROYECCION_JUGADOR` | one `Pipeline(SimpleImputer, GradientBoostingRegressor)` per target | NBA: `puntos`, `rebotes`, `asistencias`. NFL: `pase.yardas`, `carrera.yardas`, `recepcion.yardas`. Liga MX: `goles`, `asistencias`, `tiros` | the player's rolling average (training mean without history) | `mae`, averaged over targets; per-target `mae_<obj>` and `baseline_mae_<obj>` in the detail |
+
+The time holdout is a date cut: the first 80 % of distinct dates train and the rest validate, so one game never lands on both sides (D-17). Both families need a minimum of data; too little raises `DatosInsuficientesError` (outcome: 60 usable games and every class in the training part; player: 200 lines and 50 rows per target).
+
+### 5.5 Registry and activation
+
+- `registrar`: one transaction inserts `modelo_prediccion` (client UUID, `version` = `YYYYMMDDHHMMSS`, suffix `-synthetic` when any training game comes from the demo seeder, `activo = false`) and `modelo_artefacto` (joblib bytes, `sha256`, `tamano_bytes`). `artefacto_uri = db://<modelo_artefacto.id>` (D-15).
+- `activar(modelo_id)`: one transaction. It locks the (deporte, tipo) group, then sets `activo = (id = target)` for the whole group. At most one active version per group.
+- `entrenar_y_registrar`: trains, registers and activates only under the rule of D-18. It returns a summary dict (`version`, metric, baseline, `n_train`, `n_test`, `activado`, `motivo`).
+- `cargar_activo(deporte, tipo, cache_dir)`: reads the active row and its sha256. The bytes come from `cache_dir/<sha256>.joblib` when that file exists and matches the hash; otherwise they are read from `modelo_artefacto`, verified against the stored sha256 (`ArtefactoInvalidoError` on mismatch, nothing cached) and written atomically. `cache_dir` defaults to `/tmp/statline-modelos` and is a cache only: the database is the source of truth.
+
+### 5.6 Tests
+
+No database in unit tests: `tests/fabrica.py` generates deterministic synthetic games (stronger teams win more). The SQL runs in `tests/test_integracion.py` (`-m integration`, needs `DATABASE_URL`, rolls back). The `integration` job of CI runs it against PostgreSQL 16 with the Prisma migrations.
 
 ## 6. JSON Schemas
 
