@@ -28,8 +28,9 @@ PARTIDO_COLUMNAS = (
 )
 
 _SQL_PARTIDOS = """
-SELECT p.id::text, p.fecha, p.liga_id::text, p.jornada, p.local_id::text, p.visita_id::text,
-       p.marcador_local, p.marcador_visita, p.proveedor_id LIKE %s
+SELECT p.id::text AS partido_id, p.fecha, p.liga_id::text AS liga_id, p.jornada,
+       p.local_id::text AS local_id, p.visita_id::text AS visita_id,
+       p.marcador_local, p.marcador_visita, p.proveedor_id LIKE %s AS es_demo
 FROM partido p
 JOIN liga l ON l.id = p.liga_id
 WHERE l.deporte = %s::deporte AND p.estatus = %s::estatus_partido
@@ -37,8 +38,10 @@ ORDER BY p.fecha, p.id
 """
 
 _SQL_LINEAS = """
-SELECT e.partido_id::text, e.jugador_id::text, e.equipo_id::text, p.fecha,
-       p.local_id::text, p.visita_id::text, e.minutos, e.metricas, p.proveedor_id LIKE %s
+SELECT e.partido_id::text AS partido_id, e.jugador_id::text AS jugador_id,
+       e.equipo_id::text AS equipo_id, p.fecha, p.local_id::text AS local_id,
+       p.visita_id::text AS visita_id, e.minutos, e.metricas,
+       p.proveedor_id LIKE %s AS es_demo
 FROM estadistica_jugador_partido e
 JOIN partido p ON p.id = e.partido_id
 WHERE e.deporte = %s::deporte AND p.estatus = 'FINALIZADO'
