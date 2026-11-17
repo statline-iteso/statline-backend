@@ -3,6 +3,7 @@
 from ingesta.adaptadores.api_sports import ClienteApiSports
 from ingesta.adaptadores.base import AdaptadorDeporte
 from ingesta.adaptadores.basquetbol import AdaptadorBasquetbol
+from ingesta.adaptadores.futbol import AdaptadorFutbol
 from ingesta.config import Settings
 from ingesta.modelos import Deporte
 
@@ -19,8 +20,9 @@ def crear_adaptador(deporte: Deporte, settings: Settings) -> AdaptadorDeporte:
 
     if deporte is Deporte.BASQUETBOL:
         return AdaptadorBasquetbol(cliente("basketball"), settings.temporada_basquetbol)
+    if deporte is Deporte.FUTBOL:
+        return AdaptadorFutbol(cliente("football"), settings.temporada_futbol)
     # TODO(SL-18): AdaptadorAmericano (api-american-football, league 1).
-    # TODO(SL-17): AdaptadorFutbol (api-football, league 262).
     # TODO(SL-20): fallbacks balldontlie.io (NBA) and TheSportsDB (NFL, Liga MX).
     raise NotImplementedError(f"adaptador para {deporte} pendiente")
 

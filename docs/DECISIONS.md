@@ -20,6 +20,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-12 | 2026-11-16 | Catalog writes are ADMIN-only; ingestion is the normal writer | Decided |
 | D-13 | 2026-11-16 | Prisma CLI is a runtime dependency (initContainer runs `migrate deploy`) | Decided |
 | D-14 | 2026-11-16 | Pending predicciones routes answer 501 with the issue id | Decided (temporary) |
+| D-15 | 2026-11-16 | Liga MX (api-football, league 262) mapped from the provider documentation; unverified against a live response | Decided (limitation) |
 
 ## 2. Details
 
@@ -36,6 +37,8 @@ The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test con
 
 - `/api/partidos?fecha=` filters a UTC day; a 9 pm Mexico game shows up on the next UTC date.
 - Box-score field names from api-basketball were mapped from documentation and recorded fixtures; confirm against a live response once a key is available.
+- Liga MX (D-15): the api-football field mapping, the status codes and the `round` → `jornada` parsing come from the v3 documentation. The fixtures in `services/ingesta/tests/fixtures/ligamx_*.json` are synthetic, shaped like that documentation (player and club names are invented). Confirm the field names, the string-typed `passes.accuracy` and `games.rating`, and the position values against a live response once a key is available.
+- Liga MX metrics: a provider null on a required metric (`goles`, `asistencias`) is stored as 0, a null on an optional metric is left out of `metricas`. Squad players with null minutes (never on the pitch) are not stored.
 - No rate limiting until SL-31.
 
 ## 4. Future work
