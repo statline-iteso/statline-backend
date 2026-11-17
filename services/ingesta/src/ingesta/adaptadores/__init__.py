@@ -66,6 +66,3 @@ def _respaldo(deporte: Deporte, settings: Settings) -> AdaptadorDeporte | None:
 
 
 __all__ = ["AdaptadorDeporte", "crear_adaptador"]
-
-
-__all__ = ["AdaptadorDeporte", "crear_adaptador"]

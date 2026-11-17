@@ -93,6 +93,7 @@ def test_estatus_de_balldontlie() -> None:
     assert _estatus("Final") is EstatusPartido.FINALIZADO
     assert _estatus("Final/OT") is EstatusPartido.FINALIZADO
     assert _estatus("Scheduled") is EstatusPartido.PROGRAMADO
+    assert _estatus("2026-11-14T00:30:00Z") is EstatusPartido.PROGRAMADO
     assert _estatus("7:30 pm ET") is EstatusPartido.PROGRAMADO
     assert _estatus("Postponed") is EstatusPartido.POSPUESTO
     assert _estatus("Canceled") is EstatusPartido.CANCELADO

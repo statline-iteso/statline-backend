@@ -69,7 +69,7 @@ class AdaptadorTheSportsDB(AdaptadorDeporte):
                 PartidoNorm(
                     proveedor_id=prefijar(PROVEEDOR, e["idEvent"]),
                     fecha=_fecha(e),
-                    temporada=str(e.get("strSeason") or self._temporada),
+                    temporada=self._temporada,  # not strSeason: its format differs
                     estatus=estatus,
                     local=_equipo(e, "Home"),
                     visita=_equipo(e, "Away"),

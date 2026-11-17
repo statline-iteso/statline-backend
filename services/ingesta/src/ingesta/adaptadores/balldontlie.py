@@ -47,7 +47,8 @@ _METRICAS = {
     "fta": "tirosLibresIntentados",
     "plus_minus": "masMenos",
 }
-_HORA = re.compile(r"^\d{1,2}:\d{2}")  # tip-off time, e.g. "7:30 pm ET"
+# Upcoming games carry the tip-off as status: ISO timestamp or "7:30 pm ET".
+_HORA = re.compile(r"^(\d{4}-\d{2}-\d{2}t|\d{1,2}:\d{2})")
 # Required by the schema: a missing value is stored as 0 (as in AdaptadorBasquetbol).
 _REQUERIDAS = ("puntos", "rebotes", "asistencias")
 
