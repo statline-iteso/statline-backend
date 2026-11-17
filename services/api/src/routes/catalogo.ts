@@ -4,7 +4,7 @@ import { ah } from "../lib/async";
 import type { CatalogCache } from "../lib/cache";
 import { createCrudRouter, IdParamSchema } from "../lib/crud";
 import { AppError, notFound } from "../lib/errors";
-import { metricasNumericas } from "../lib/metricas";
+import { metricasNumericas } from "../lib/metricas-rutas";
 import { promediosJugador, tendenciaJugador } from "../lib/agregados";
 import { calcularForma, calcularPosiciones, type ResultadoPartido } from "../lib/standings";
 import {

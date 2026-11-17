@@ -1,58 +1,54 @@
-import { readFileSync } from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
+import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020";
 import type { Deporte } from "@prisma/client";
 
-/** Repo root: the same depth from src/lib (dev, tests) and dist/lib (build). */
-const REPO_ROOT = path.resolve(__dirname, "../../../..");
-
-type JsonObject = Record<string, unknown>;
-
-const isObject = (value: unknown): value is JsonObject =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-function resolverRef(nodo: JsonObject, defs: JsonObject): JsonObject {
-  const ref = nodo.$ref;
-  if (typeof ref !== "string") return nodo;
-  const destino = defs[ref.replace(/^#\/\$defs\//, "")];
-  return isObject(destino) ? destino : {};
+/** One problem with a `metricas` object; `path` is dotted, e.g. "metricas.puntos". */
+export interface ErrorMetrica {
+  path: string;
+  message: string;
 }
 
-/**
- * Dotted paths of every numeric leaf of a metrics JSON Schema. Flat sports (NBA, Liga MX) give
- * "puntos"; NFL groups give "pase.yardas". Pure, so it is unit-tested without files.
- */
-export function rutasNumericas(schema: unknown): string[] {
-  if (!isObject(schema)) return [];
-  const defs = isObject(schema.$defs) ? schema.$defs : {};
-  const rutas: string[] = [];
-  const recorrer = (nodo: JsonObject, prefijo: string) => {
-    const propiedades = isObject(nodo.properties) ? nodo.properties : {};
-    for (const [clave, crudo] of Object.entries(propiedades)) {
-      if (!isObject(crudo)) continue;
-      const sub = resolverRef(crudo, defs);
-      const ruta = prefijo ? `${prefijo}.${clave}` : clave;
-      if (sub.type === "integer" || sub.type === "number") rutas.push(ruta);
-      else if (sub.type === "object") recorrer(sub, ruta);
-    }
-  };
-  recorrer(schema, "");
-  return rutas;
+export interface MetricasValidator {
+  /** Returns [] when valid. Never throws for bad data; only for a missing or broken schema file. */
+  validar(deporte: Deporte, metricas: unknown): ErrorMetrica[];
 }
 
-const cache = new Map<string, readonly string[]>();
+const ARCHIVO: Record<Deporte, string> = {
+  BASQUETBOL: "basquetbol",
+  AMERICANO: "americano",
+  FUTBOL: "futbol",
+};
 
 /**
- * Numeric metric paths for a sport, read from `<schemasDir>/<deporte>.schema.json` (same file
- * name rule as the ingesta validator). `schemasDir` is relative to the repo root unless absolute.
- * Results are cached per file. The file is trusted (it ships with the image), so a missing file
- * is a server error, not a client one.
+ * Loads schemas/<deporte>.schema.json (Draft 2020-12) once at startup, so a missing schema
+ * fails the boot instead of the first request. Same rule as the ingesta service (D-06).
  */
-export function metricasNumericas(deporte: Deporte, schemasDir = "schemas"): readonly string[] {
-  const archivo = path.resolve(REPO_ROOT, schemasDir, `${deporte.toLowerCase()}.schema.json`);
-  let rutas = cache.get(archivo);
-  if (!rutas) {
-    rutas = rutasNumericas(JSON.parse(readFileSync(archivo, "utf8")) as unknown);
-    cache.set(archivo, rutas);
+export function createMetricasValidator(schemasDir: string): MetricasValidator {
+  const ajv = new Ajv2020({ allErrors: true });
+  const validadores = new Map<Deporte, ValidateFunction>();
+  for (const deporte of Object.keys(ARCHIVO) as Deporte[]) {
+    const ruta = path.join(schemasDir, `${ARCHIVO[deporte]}.schema.json`);
+    const esquema: unknown = JSON.parse(fs.readFileSync(ruta, "utf8"));
+    validadores.set(deporte, ajv.compile(esquema as object));
   }
-  return rutas;
+
+  return {
+    validar(deporte, metricas) {
+      const validate = validadores.get(deporte);
+      if (!validate) throw new Error(`Sin esquema para ${deporte}`);
+      if (validate(metricas)) return [];
+      return (validate.errors ?? []).map(toErrorMetrica);
+    },
+  };
+}
+
+function toErrorMetrica(e: ErrorObject): ErrorMetrica {
+  // additionalProperties reports the offending key in params, not in instancePath.
+  const extra =
+    e.keyword === "additionalProperties" ? `/${String(e.params.additionalProperty)}` : "";
+  return {
+    path: `metricas${e.instancePath}${extra}`.replace(/\//g, "."),
+    message: e.message ?? "no es válido",
+  };
 }

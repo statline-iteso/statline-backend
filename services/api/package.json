@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@prisma/client": "5.22.0",
+    "ajv": "8.17.1",
     "bcryptjs": "2.4.3",
     "express": "4.22.3",
     "express-rate-limit": "8.7.2",

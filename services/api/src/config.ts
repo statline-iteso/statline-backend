@@ -1,4 +1,8 @@
+import path from "node:path";
 import { z } from "zod";
+
+/** Repo `schemas/` when running from source (src/ or dist/ are both three levels below the root). */
+export const defaultSchemasDir = path.resolve(__dirname, "../../../schemas");
 
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -14,8 +18,9 @@ const ConfigSchema = z.object({
   CACHE_TTL_S: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_LOGIN_PER_MIN: z.coerce.number().int().positive().default(10),
-  SCHEMAS_DIR: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  /** Directory with <deporte>.schema.json files. The image sets /app/schemas. */
+  SCHEMAS_DIR: z.string().min(1).default(defaultSchemasDir),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
