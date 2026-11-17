@@ -1,9 +1,10 @@
 name: CD
 
 # Proposal §4.3, step 2 for the api, predicciones and ingesta images: on develop, main and
-# vX.Y.Z tags, push the images to Docker Hub, scan the pushed image with Trivy (fail on
-# HIGH/CRITICAL) and ask statline-infra to bump the image tags of the matching environment.
-# develop → staging; main and tags → prod. Nothing deploys from here: Argo CD syncs infra.
+# vX.Y.Z tags, build the images, scan them with Trivy (fail on HIGH/CRITICAL), push to
+# Docker Hub only when the scan passes and ask statline-infra to bump the image tags of the matching environment.
+# develop → staging; main and tags → prod (a main push and a tag on the same commit bump prod
+# twice, to the same image: idempotent). Nothing deploys from here: Argo CD syncs infra.
 
 on:
   push:
@@ -44,13 +45,14 @@ jobs:
             type=sha,format=short,prefix=
             type=ref,event=tag
 
-      - name: Build and push (linux/amd64, multi-stage)
+      - name: Build (linux/amd64, multi-stage, loaded locally; nothing is pushed yet)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: services/${{ matrix.service }}/Dockerfile
           platforms: linux/amd64
-          push: true
+          load: true
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
@@ -62,7 +64,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: echo "short=${SHA::7}" >> "$GITHUB_OUTPUT"
 
-      - name: Trivy on the pushed image (fail on HIGH/CRITICAL)
+      - name: Trivy on the local image (fail on HIGH/CRITICAL, before any push)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: statline/${{ matrix.service }}:${{ steps.sha.outputs.short }}
@@ -71,6 +73,17 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
+
+      - name: Push (only reached when the scan passed; layers come from the build cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
 
   dispatch:
     name: tell statline-infra which tags to deploy
@@ -86,6 +99,10 @@ jobs:
           SHORT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          case "$REF" in
+            refs/tags/*) [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+              || { echo "::error::Tag '$REF_NAME' is not strict vX.Y.Z; statline-infra would reject it"; exit 1; } ;;
+          esac
           case "$REF" in
             refs/heads/develop) env=staging; tag="${SHORT_SHA::7}" ;;
             refs/heads/main)    env=prod;    tag="${SHORT_SHA::7}" ;;
