@@ -70,3 +70,8 @@ docker build -f services/predicciones/Dockerfile -t statline/predicciones:local 
 ```
 
 Pushing to Docker Hub is done by `cd.yml` after a merge (pending, SL-53). What the Kubernetes manifests need (ports, probes, env vars, args) is in [docs/ARCHITECTURE.md §8](docs/ARCHITECTURE.md#8-deployment-contract-for-the-infra-chart).
+
+## CI/CD
+
+- `ci.yml` runs on every push and PR. `cd.yml` runs on pushes to `develop` and `main` and on `vX.Y.Z` tags: it pushes `statline/api`, `statline/predicciones` and `statline/ingesta` to Docker Hub (7-char SHA, plus `vX.Y.Z` on tags), scans them with Trivy and asks statline-infra to deploy the new tags (`develop` → staging, `main` and tags → prod).
+- Required repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `INFRA_DISPATCH_TOKEN` (fine-grained PAT with `contents: write` on `statline-iteso/statline-infra`).
