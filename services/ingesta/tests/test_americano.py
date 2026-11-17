@@ -26,6 +26,28 @@ def linea(grupos: list[dict[str, Any]], nombre: str = "Jugador Prueba") -> dict[
         "team": {"id": 10},
         "player": {"id": 9001, "name": nombre, "position": "QB"},
         "groups": grupos,
+    }  # legacy one-entry-per-player shape; real shape is built by `equipo`
+
+
+def equipo(
+    jugadores: dict[tuple[int, str], list[dict[str, Any]]], team_id: int = 10
+) -> dict[str, Any]:
+    """Real shape: one entry per team, players nested inside each category group."""
+    nombres = {g["name"] for gs in jugadores.values() for g in gs}
+    return {
+        "team": {"id": team_id},
+        "groups": [
+            {
+                "name": n,
+                "players": [
+                    {"player": {"id": pid, "name": nom}, "statistics": g["statistics"]}
+                    for (pid, nom), gs in jugadores.items()
+                    for g in gs
+                    if g["name"] == n
+                ],
+            }
+            for n in sorted(nombres)
+        ],
     }
 
 
@@ -60,7 +82,7 @@ def test_obtener_estadisticas_llama_al_endpoint_de_jugadores() -> None:
         )
     )
     a = adaptador()
-    assert len(a.obtener_estadisticas("1001")) == 7
+    assert len(a.obtener_estadisticas("1001")) == 2
     assert dict(ruta.calls[0].request.url.params) == {"id": "1001"}
 
 
@@ -103,7 +125,8 @@ def test_normalizar_partidos() -> None:
     ],
 )
 def test_mapeo_de_estatus(codigo: str, esperado: EstatusPartido) -> None:
-    crudo = cargar("nfl_games.json")["response"][0] | {"status": {"short": codigo}}
+    base = cargar("nfl_games.json")["response"][0]
+    crudo = base | {"game": base["game"] | {"status": {"short": codigo}}}
     assert adaptador().normalizar([crudo])[0].estatus is esperado
 
 
@@ -118,24 +141,26 @@ def test_normalizar_estadisticas_mapea_categorias_y_valida(schemas_dir: str) -> 
     a = adaptador()
     lineas = a.normalizar_estadisticas("1001", cargar("nfl_players_stats.json")["response"])
 
-    # B. Bench (no groups) is dropped, as DNPs are in basketball.
-    assert [x.jugador.nombre for x in lineas] == [
+    # Players are regrouped from team > category > player; B. Bench never appears in a group.
+    por_nombre = {x.jugador.nombre: x for x in lineas}
+    assert set(por_nombre) == {
         "Q. Passer",
         "R. Runner",
         "T. Receiver",
         "K. Kicker",
         "D. Defender",
         "N. Blanks",
-    ]
+    }
+    assert len(lineas) == 6
     for x in lineas:
         validar_metricas(schemas_dir, a.deporte, x.metricas)
         assert x.minutos is None
         assert x.partido_proveedor_id == "1001"
 
-    passer = lineas[0]
+    passer = por_nombre["Q. Passer"]
     assert passer.equipo_proveedor_id == "10"
     assert passer.jugador.proveedor_id == "3001"
-    assert passer.jugador.posicion == "QB"
+    assert passer.jugador.posicion is None  # the API does not report positions
     assert passer.metricas == {
         "pase": {
             "completos": 24,
@@ -148,7 +173,7 @@ def test_normalizar_estadisticas_mapea_categorias_y_valida(schemas_dir: str) -> 
         "carrera": {"acarreos": 4, "yardas": 11, "touchdowns": 0, "balonesSueltos": 0},
     }
 
-    runner = lineas[1]
+    runner = por_nombre["R. Runner"]
     assert set(runner.metricas) == {"carrera", "recepcion"}
     assert runner.metricas["carrera"]["acarreos"] == 18
     assert runner.metricas["carrera"]["balonesSueltos"] == 1
@@ -159,7 +184,7 @@ def test_normalizar_estadisticas_mapea_categorias_y_valida(schemas_dir: str) -> 
         "touchdowns": 0,
     }
 
-    kicker = lineas[3]
+    kicker = por_nombre["K. Kicker"]
     assert kicker.metricas == {
         "pateo": {
             "golesCampoAnotados": 2,
@@ -169,11 +194,10 @@ def test_normalizar_estadisticas_mapea_categorias_y_valida(schemas_dir: str) -> 
         }
     }
 
-    defender = lineas[4]
+    defender = por_nombre["D. Defender"]
     assert defender.metricas["defensa"]["capturas"] == 1.5
     assert defender.metricas["defensa"]["tacleadas"] == 6
     assert defender.metricas["defensa"]["pasesDefendidos"] == 1
-    assert defender.jugador.posicion == "LB"
 
 
 def test_normalizar_estadisticas_tolera_guiones_y_nulos(schemas_dir: str) -> None:
@@ -274,3 +298,27 @@ def test_crear_adaptador_americano_usa_la_temporada_de_settings() -> None:
     assert isinstance(adaptador_creado, AdaptadorAmericano)
     assert adaptador_creado.proveedor_liga_id == "1"
     assert adaptador_creado._temporada == "2027"
+
+
+def test_fecha_se_normaliza_a_utc() -> None:
+    base = cargar("nfl_games.json")["response"][0]
+    esperado = datetime(2026, 11, 15, 18, 0, tzinfo=UTC)
+    sin_timestamp = base["game"]["date"] | {"timestamp": None}
+    for fecha in (sin_timestamp, "2026-11-15T18:00:00", "2026-11-15T12:00:00-06:00"):
+        crudo = base | {"game": base["game"] | {"date": fecha}}
+        assert adaptador().normalizar([crudo])[0].fecha == esperado
+
+
+def test_jugador_en_varias_categorias_y_equipos_se_agrupa_por_equipo() -> None:
+    a = adaptador()
+    lineas = [
+        equipo(
+            {(1, "Uno"): [grupo("Rushing", carries=2, yards=5), grupo("Receiving", receptions=1)]}
+        ),
+        equipo({(1, "Uno"): [grupo("Rushing", carries=9, yards=40)]}, team_id=11),
+    ]
+    resultado = a.normalizar_estadisticas("7", lineas)
+    assert [(x.equipo_proveedor_id, set(x.metricas)) for x in resultado] == [
+        ("10", {"carrera", "recepcion"}),
+        ("11", {"carrera"}),
+    ]

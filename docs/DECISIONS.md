@@ -32,9 +32,10 @@ Cross-sport queries (a player's lines, a game's box score) stay one table; sport
 
 ### D-15 · NFL field mapping from documentation (SL-18)
 `AdaptadorAmericano` maps API-Sports american-football games and player statistics to `schemas/americano.schema.json`. No API key was available during development, so the fixtures in `tests/fixtures/nfl_*.json` follow the documented shapes and are **not** a recording. The assumptions to confirm on the first real run:
-- Player lines come as `groups[].statistics[]` with `name`/`value` pairs, grouped as Passing, Rushing, Receiving, Defensive (or Defense) and Kicking; `completions/attempts`, `field goals` and `extra points` are `"made/attempts"` strings.
-- Game status codes (`NS`, `Q1`–`Q4`, `OT`, `HT`, `FT`, `AOT`, `PST`, `CANC`, …) and `scores.<side>.total`.
-- `player.position` is optional and becomes `jugador.posicion`.
+- Games nest under `game` (`id`, `status.short`, `date.timestamp`, UTC), unlike api-basketball; `scores.<side>.total` and `league.season` are top level.
+- Player statistics come per team as `[{team, groups: [{name, players: [{player, statistics: [{name, value}]}]}]}]` with categories Passing, Rushing, Receiving, Defensive (or Defense) and Kicking; made/attempts values (`comp att`, `field goals`, `extra points`) are `"made/attempts"` strings. Exact stat names are the least certain part (aliases are accepted for a few).
+- Game status codes (`NS`, `Q1`–`Q4`, `OT`, `HT`, `FT`, `AOT`, `PST`, `CANC`, …).
+- The API reports no player position, so `jugador.posicion` stays empty.
 
 Unknown stat names are ignored and unparsable values count as 0, so a wrong name shows up as zeros rather than a failed run. Check a real `/games/statistics/players` response before trusting NFL numbers.
 

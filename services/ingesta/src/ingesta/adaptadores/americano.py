@@ -4,14 +4,16 @@ Field names and the status codes below come from the API-Sports documentation, n
 response (no API key in development). Confirm them against a real payload before relying on the
 NFL metrics; see docs/DECISIONS.md.
 
-Player lines arrive grouped by category (Passing, Rushing, Receiving, Defensive, Kicking) with
-string values such as "24/35" (made/attempts), "1-2" or "-". Missing, "-" or unparsable values
-count as 0, and a player without any recognised group is skipped, like a DNP in basketball.
+Unlike api-basketball, games nest under `game` (id, status, date{date,time,timestamp}) and the
+player statistics come per team: [{team, groups: [{name, players: [{player, statistics}]}]}].
+They are regrouped per player here. Values are strings such as "24/35" (made/attempts), "1-2" or
+"-"; missing, "-" or unparsable values count as 0, and a player without any recognised group is
+skipped, like a DNP in basketball. The API does not report player positions.
 """
 
 import math
 import re
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from ingesta.adaptadores.api_sports import ClienteApiSports
@@ -85,14 +87,15 @@ class AdaptadorAmericano(AdaptadorDeporte):
     def normalizar(self, partidos: list[dict[str, Any]]) -> list[PartidoNorm]:
         resultado: list[PartidoNorm] = []
         for p in partidos:
+            juego = p.get("game") or p
             local, visita = p["teams"]["home"], p["teams"]["away"]
             scores = p.get("scores") or {}
             resultado.append(
                 PartidoNorm(
-                    proveedor_id=str(p["id"]),
-                    fecha=datetime.fromisoformat(p["date"]),
+                    proveedor_id=str(juego["id"]),
+                    fecha=_fecha(juego["date"]),
                     temporada=str((p.get("league") or {}).get("season", self._temporada)),
-                    estatus=_ESTATUS.get(p["status"]["short"], EstatusPartido.EN_JUEGO),
+                    estatus=_ESTATUS.get(juego["status"]["short"], EstatusPartido.EN_JUEGO),
                     local=EquipoNorm(str(local["id"]), local["name"], logo_url=local.get("logo")),
                     visita=EquipoNorm(
                         str(visita["id"]), visita["name"], logo_url=visita.get("logo")
@@ -109,16 +112,15 @@ class AdaptadorAmericano(AdaptadorDeporte):
         self, partido_proveedor_id: str, lineas: list[dict[str, Any]]
     ) -> list[EstadisticaNorm]:
         resultado: list[EstadisticaNorm] = []
-        for linea in lineas:
-            metricas = _metricas(_grupos(linea.get("groups")))
+        for equipo, jugador, grupos in _jugadores(lineas):
+            metricas = _metricas(grupos)
             if not metricas:
                 # Did not play, or only reported categories this adapter does not map.
                 continue
-            jugador = linea["player"]
             resultado.append(
                 EstadisticaNorm(
                     partido_proveedor_id=partido_proveedor_id,
-                    equipo_proveedor_id=str(linea["team"]["id"]),
+                    equipo_proveedor_id=equipo,
                     jugador=JugadorNorm(
                         str(jugador["id"]),
                         str(jugador["name"]),
@@ -132,10 +134,52 @@ class AdaptadorAmericano(AdaptadorDeporte):
         return resultado
 
 
+def _fecha(valor: Any) -> datetime:
+    """{date, time, timestamp} (UTC unless a timezone is requested) or an ISO string → aware."""
+    if isinstance(valor, dict):
+        if valor.get("timestamp") is not None:
+            return datetime.fromtimestamp(int(valor["timestamp"]), tz=UTC)
+        valor = f"{valor['date']}T{valor.get('time') or '00:00'}"
+    fecha = datetime.fromisoformat(str(valor))
+    return fecha if fecha.tzinfo else fecha.replace(tzinfo=UTC)
+
+
+def _jugadores(
+    lineas: list[dict[str, Any]],
+) -> list[tuple[str, dict[str, Any], dict[str, Estadisticas]]]:
+    """Regroups [{team, groups[{name, players[{player, statistics}]}]}] by player.
+
+    Also accepts one entry per player ({team, player, groups[{name, statistics}]}).
+    """
+    por_jugador: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Estadisticas]]] = {}
+    for linea in lineas:
+        equipo = str(linea["team"]["id"])
+        if "player" in linea:
+            entradas = [(linea["player"], g) for g in linea.get("groups") or []]
+        else:
+            entradas = [
+                (j["player"], {"name": g["name"], "statistics": j.get("statistics")})
+                for g in linea.get("groups") or []
+                for j in g.get("players") or []
+            ]
+        for jugador, grupo in entradas:
+            _, grupos = por_jugador.setdefault((equipo, str(jugador["id"])), (jugador, {}))
+            grupos.update(_grupos([grupo]))
+    return [(clave[0], j, g) for clave, (j, g) in por_jugador.items()]
+
+
 def _total(bloque: Any) -> int | None:
     if not isinstance(bloque, dict) or bloque.get("total") is None:
         return None
     return int(_numero(bloque["total"]))
+
+
+def _valor(g: Estadisticas, *nombres: str) -> Any:
+    """First present stat among the spellings the API is documented/seen to use."""
+    for nombre in nombres:
+        if nombre in g:
+            return g[nombre]
+    return None
 
 
 def _grupos(crudos: Any) -> dict[str, Estadisticas]:
@@ -161,7 +205,7 @@ def _metricas(grupos: dict[str, Estadisticas]) -> dict[str, dict[str, float]]:
     metricas: dict[str, dict[str, float]] = {}
 
     if (g := _grupo(grupos, _GRUPO_PASE)) is not None:
-        completos, intentos = _par(g.get("completions/attempts"))
+        completos, intentos = _par(_valor(g, "comp att", "completions/attempts"))
         metricas["pase"] = {
             "completos": completos,
             "intentos": intentos,
@@ -172,7 +216,7 @@ def _metricas(grupos: dict[str, Estadisticas]) -> dict[str, dict[str, float]]:
         }
     if (g := _grupo(grupos, _GRUPO_CARRERA)) is not None:
         metricas["carrera"] = {
-            "acarreos": _conteo(g.get("carries")),
+            "acarreos": _conteo(_valor(g, "carries", "total rushes")),
             "yardas": _entero(g.get("yards")),
             "touchdowns": _conteo(g.get("touchdowns")),
             "balonesSueltos": _conteo(g.get("fumbles lost")),
@@ -180,7 +224,7 @@ def _metricas(grupos: dict[str, Estadisticas]) -> dict[str, dict[str, float]]:
     if (g := _grupo(grupos, _GRUPO_RECEPCION)) is not None:
         metricas["recepcion"] = {
             "objetivos": _conteo(g.get("targets")),
-            "recepciones": _conteo(g.get("receptions")),
+            "recepciones": _conteo(_valor(g, "receptions", "total receptions")),
             "yardas": _entero(g.get("yards")),
             "touchdowns": _conteo(g.get("touchdowns")),
         }
@@ -193,8 +237,8 @@ def _metricas(grupos: dict[str, Estadisticas]) -> dict[str, dict[str, float]]:
             "balonesForzados": _conteo(g.get("forced fumbles")),
         }
     if (g := _grupo(grupos, _GRUPO_PATEO)) is not None:
-        fg_anotados, fg_intentados = _par(g.get("field goals"))
-        xp_anotados, xp_intentados = _par(g.get("extra points"))
+        fg_anotados, fg_intentados = _par(_valor(g, "field goals", "fg made/att"))
+        xp_anotados, xp_intentados = _par(_valor(g, "extra points", "xp made/att"))
         metricas["pateo"] = {
             "golesCampoAnotados": fg_anotados,
             "golesCampoIntentados": fg_intentados,
