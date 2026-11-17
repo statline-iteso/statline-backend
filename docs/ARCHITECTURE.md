@@ -229,3 +229,11 @@ The api image copies `schemas/` to `/app/schemas` (the api reads metric keys fro
 The api ServiceAccount needs the namespaced Role described in §3.5 when `INGESTA_LANZADOR=kubernetes`; the pod gets `KUBERNETES_SERVICE_HOST`/`PORT` and the token mount from Kubernetes.
 
 Seasons in `TEMPORADA_*` must match the seeded `liga.temporada` values (`2025-2026`, `2026`, `2026`). Exit code ≠ 0 from `ingesta run` marks the Job failed.
+
+## 9. CI/CD
+
+- **CI** (`ci.yml`, every push and PR): lint, types, unit tests with the 70 % gate, integration tests against PostgreSQL 16, multi-stage image builds, Trivy (fails on HIGH/CRITICAL).
+- **CD** (`cd.yml`, pushes to `develop` and `main`, and `vX.Y.Z` tags): builds `linux/amd64` images for `api`, `predicciones` and `ingesta`, pushes them to Docker Hub as `statline/<svc>:<short-sha>` (7 chars) and, on tags, `statline/<svc>:vX.Y.Z`, scans each pushed image with Trivy, then sends a `repository_dispatch` `bump-image` to `statline-iteso/statline-infra`.
+- **Environment mapping:** `develop` → staging, `main` and tags → prod. Infra writes the tags into `gitops/charts/statline/values-<env>.yaml`; Argo CD syncs from there. The backend never touches a cluster.
+- **Dispatch payload:** `{"event_type":"bump-image","client_payload":{"env":"staging|prod","images":{"api":"<tag>","predicciones":"<tag>","ingesta":"<tag>"},"source_repo":"statline-iteso/statline-backend","sha":"<full sha>"}}`. Tags are `^[0-9a-f]{7}$` or `^v[0-9]+\.[0-9]+\.[0-9]+$`; infra rejects anything else.
+- **Secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (push), `INFRA_DISPATCH_TOKEN` (fine-grained PAT, `contents: write` on statline-infra, used only for the dispatch).
