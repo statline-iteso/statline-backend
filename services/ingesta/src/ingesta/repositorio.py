@@ -103,6 +103,17 @@ class RepositorioPostgres:
         assert fila is not None
         return str(fila[0])
 
+    def _equipo_por_proveedor(self, liga_id: str, proveedor_id: str) -> str:
+        fila = self._conn.execute(
+            "INSERT INTO equipo (id, liga_id, nombre, proveedor_id) VALUES (%s, %s, %s, %s)"
+            " ON CONFLICT (liga_id, proveedor_id) DO UPDATE"
+            " SET proveedor_id = EXCLUDED.proveedor_id"
+            " RETURNING id",
+            (str(uuid.uuid4()), liga_id, proveedor_id, proveedor_id),
+        ).fetchone()
+        assert fila is not None
+        return str(fila[0])
+
     def _jugador(self, deporte: Deporte, equipo_id: str, jugador: JugadorNorm) -> str:
         fila = self._conn.execute(
             "INSERT INTO jugador (id, equipo_id, deporte, nombre, posicion, proveedor_id)"
@@ -153,9 +164,9 @@ class RepositorioPostgres:
         self, deporte: Deporte, liga_id: str, partido_id: str, linea: EstadisticaNorm
     ) -> None:
         with self._conn.transaction():
-            equipo_id = self._equipo(
-                liga_id, EquipoNorm(linea.equipo_proveedor_id, linea.equipo_proveedor_id)
-            )
+            # Teams come from guardar_partido with their real names. A missing team is created
+            # with its provider id as placeholder; an existing name is never overwritten.
+            equipo_id = self._equipo_por_proveedor(liga_id, linea.equipo_proveedor_id)
             jugador_id = self._jugador(deporte, equipo_id, linea.jugador)
             self._conn.execute(
                 "INSERT INTO estadistica_jugador_partido"

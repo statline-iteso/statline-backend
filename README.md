@@ -45,6 +45,9 @@ pnpm --filter @statline/api db:seed
 pnpm --filter @statline/api dev                                       # API on :3000
 (cd services/predicciones && uv run uvicorn predicciones.main:app --reload --port 8000)
 (cd services/ingesta && uv run ingesta run basquetbol --desde 2026-11-14)   # needs API_SPORTS_KEY
+
+# 5. Optional, dev only: synthetic demo data (no API key, never run by CronJobs)
+(cd services/ingesta && uv run ingesta seed-demo --confirmar)   # --deportes, --semilla, --dias
 ```
 
 ## Testing and quality
