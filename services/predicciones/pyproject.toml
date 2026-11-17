@@ -47,3 +47,7 @@ strict = true
 python_version = "3.12"
 mypy_path = "src"
 packages = ["predicciones"]
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "joblib.*"]
+ignore_missing_imports = true
