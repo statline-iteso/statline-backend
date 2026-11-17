@@ -6,6 +6,7 @@ import type { LanzadorIngesta } from "../src/lib/ingesta-lanzador";
 import { defaultSchemasDir } from "../src/config";
 import { createMetricasValidator } from "../src/lib/metricas";
 import { createMetrics } from "../src/lib/metrics";
+import type { PrediccionesClient } from "../src/lib/predicciones";
 import { tokens } from "./helpers";
 
 /** App with a custom launcher; the same token service as helpers.ts. */
@@ -17,6 +18,7 @@ export function buildAppWithLanzador(lanzador: LanzadorIngesta) {
     metrics: createMetrics(),
     logger: pino({ level: "silent" }),
     metricas: createMetricasValidator(defaultSchemasDir),
+    predicciones: mockDeep<PrediccionesClient>(),
     lanzador,
   });
   return { app, prisma };

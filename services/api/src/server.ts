@@ -7,6 +7,7 @@ import { createMetrics } from "./lib/metrics";
 import { createRedis } from "./lib/redis";
 import { createMetricasValidator } from "./lib/metricas";
 import { crearLanzadorIngesta } from "./lib/ingesta-lanzador";
+import { createPrediccionesClient } from "./lib/predicciones";
 
 const config = loadConfig();
 const logger = pino({ level: config.LOG_LEVEL });
@@ -24,6 +25,10 @@ const app = createApp({
   schemasDir: config.SCHEMAS_DIR,
   metricas: createMetricasValidator(config.SCHEMAS_DIR),
   lanzador: crearLanzadorIngesta(config.INGESTA_LANZADOR),
+  predicciones: createPrediccionesClient({
+    baseUrl: config.PREDICCIONES_URL,
+    timeoutMs: config.PREDICCIONES_TIMEOUT_MS,
+  }),
   tokens: createTokenService({
     accessSecret: config.JWT_SECRET,
     refreshSecret: config.JWT_REFRESH_SECRET,

@@ -13,6 +13,7 @@ const ConfigSchema = z.object({
   JWT_ACCESS_TTL: z.string().default("15m"),
   JWT_REFRESH_TTL: z.string().default("7d"),
   PREDICCIONES_URL: z.string().url().default("http://predicciones:8000"),
+  PREDICCIONES_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   /** Optional. When unset the cache is bypassed and rate limits are kept in process memory. */
   REDIS_URL: z.string().optional(),
   CACHE_TTL_S: z.coerce.number().int().positive().default(60),

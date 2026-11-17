@@ -9,6 +9,7 @@ import { createTokenService, type Rol } from "../src/lib/auth";
 import { createMetricasValidator } from "../src/lib/metricas";
 import { createMetrics } from "../src/lib/metrics";
 import type { RedisHandle } from "../src/lib/redis";
+import type { PrediccionesClient } from "../src/lib/predicciones";
 
 export const tokens = createTokenService({
   accessSecret: "test-access-secret-0123456789",
@@ -20,15 +21,17 @@ export const tokens = createTokenService({
 export function buildApp(overrides: Partial<AppDeps> = {}) {
   const prisma = mockDeep<PrismaClient>() as DeepMockProxy<PrismaClient>;
   const metrics = overrides.metrics ?? createMetrics();
+  const predicciones = mockDeep<PrediccionesClient>() as DeepMockProxy<PrediccionesClient>;
   const app = createApp({
     prisma: prisma as unknown as PrismaClient,
     tokens,
     metrics,
     metricas: createMetricasValidator(defaultSchemasDir),
     logger: pino({ level: "silent" }),
+    predicciones,
     ...overrides,
   });
-  return { app, prisma, metrics };
+  return { app, prisma, metrics, predicciones };
 }
 
 export const USER_ID = "11111111-1111-4111-8111-111111111111";
