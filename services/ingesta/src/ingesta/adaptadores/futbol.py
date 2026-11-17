@@ -1,7 +1,7 @@
 """Liga MX through api-football v3 (league 262). Mirrors AdaptadorBasquetbol (SL-17).
 
 The field mapping follows the api-football documentation and was not checked against a live
-response yet (no API key in development). See docs/DECISIONS.md, D-16.
+response yet (no API key in development). See docs/DECISIONS.md, D-25.
 """
 
 from datetime import date, datetime

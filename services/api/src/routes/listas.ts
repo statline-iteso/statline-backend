@@ -15,7 +15,7 @@ const userOf = (res: Response) => res.locals.user as Claims;
 /**
  * /api/listas: each user sees and changes only their own lists. Lists of other users are
  * answered with 404 (not 403) so their ids can't be probed. ADMIN can read every list but
- * still changes only its own (D-15).
+ * still changes only its own (D-18).
  */
 export function listasRouter({ prisma }: Deps): Router {
   const router = Router();

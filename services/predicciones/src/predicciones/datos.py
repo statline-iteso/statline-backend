@@ -1,7 +1,7 @@
 """PostgreSQL data access. The only module with SQL; every query is parameterized.
 
 Tables are owned by Prisma Migrate (services/api/prisma/schema.prisma). Synthetic games from the
-demo seeder are flagged with `es_demo`: their provider ids start with `demo-` (D-16).
+demo seeder are flagged with `es_demo`: their provider ids start with `demo-` (D-29).
 """
 
 from collections.abc import Mapping, Sequence

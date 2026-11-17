@@ -1,7 +1,7 @@
 """Registry: one adapter per sport. The CronJob passes the sport name on the command line.
 
 Each sport gets its API-Sports adapter, wrapped with a fallback provider when one is configured
-(NBA: balldontlie, needs BALLDONTLIE_API_KEY; NFL and Liga MX: TheSportsDB). D-17.
+(NBA: balldontlie, needs BALLDONTLIE_API_KEY; NFL and Liga MX: TheSportsDB). D-26.
 """
 
 import logging

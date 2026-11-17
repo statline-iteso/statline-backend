@@ -7,7 +7,7 @@ This repository hosts the three backend services and the shared JSON Schemas:
 | Service | Stack | Image | Status |
 |---|---|---|---|
 | [`services/api`](services/api) | Node 20, Express, TypeScript, Prisma, JWT + bcrypt | `statline/api` | Auth, usuarios, ligas, equipos, jugadores, partidos ✅ · remaining routes pending |
-| [`services/ingesta`](services/ingesta) | Python 3.12, httpx, pandas, psycopg, jsonschema | `statline/ingesta` | NBA end to end ✅ · NFL adapter ✅ (from docs, unverified live) · Liga MX ✅ (field mapping unverified, D-16) · balldontlie/TheSportsDB fallbacks ✅ (unverified live) |
+| [`services/ingesta`](services/ingesta) | Python 3.12, httpx, pandas, psycopg, jsonschema | `statline/ingesta` | NBA end to end ✅ · NFL adapter ✅ (from docs, unverified live) · Liga MX ✅ (field mapping unverified, D-25) · balldontlie/TheSportsDB fallbacks ✅ (unverified live) |
 | [`services/predicciones`](services/predicciones) | Python 3.12, FastAPI, scikit-learn | `statline/predicciones` | Probes, contract, features, outcome and player models, registry, HTTP handlers (generate, precision, retrain, activate) ✅ |
 | [`schemas/`](schemas) | JSON Schema 2020-12 | — | NBA, NFL, Liga MX ✅ |
 

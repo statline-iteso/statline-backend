@@ -5,7 +5,7 @@ DataFrames or dicts and need no database. The `generar_*`, `precision`, `reentre
 `activar` functions do the I/O through `datos` and `registro`.
 
 Responses are camelCase (CONVENTIONS §3, so the Node proxy passes them through); request bodies
-stay snake_case (schemas.py). D-20 and D-21 describe the rules.
+stay snake_case (schemas.py). D-33 and D-34 describe the rules.
 """
 
 import math
@@ -292,7 +292,7 @@ def reentrenar(conn: Conexion, body: ReentrenarRequest) -> dict[str, Any]:
 
 
 def activar(conn: Conexion, modelo_id: str) -> dict[str, Any]:
-    """Admin override: makes the model active WITHOUT the D-18 baseline check."""
+    """Admin override: makes the model active WITHOUT the D-31 baseline check."""
     try:
         normalizado = str(uuid.UUID(modelo_id))
     except ValueError as err:

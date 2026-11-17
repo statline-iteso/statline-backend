@@ -1,9 +1,9 @@
-"""NFL (league 4391) and Liga MX (league 4350) through TheSportsDB v1: fallback (SL-20, D-17).
+"""NFL (league 4391) and Liga MX (league 4350) through TheSportsDB v1: fallback (SL-20, D-26).
 
 Built from the TheSportsDB documentation, not from a live response. `eventsday.php?d=&l=` lists the
 events of one day. The free tier has no player box scores, so `obtener_estadisticas` makes no
 request and returns nothing: after a switch to this fallback only games and scores are stored.
-Ids are namespaced `thesportsdb:` (D-17). `strTime` is taken as UTC (to confirm on a live response).
+Ids are namespaced `thesportsdb:` (D-26). `strTime` is taken as UTC (to confirm on a live response).
 """
 
 from datetime import UTC, date, datetime, time
@@ -42,7 +42,7 @@ class AdaptadorTheSportsDB(AdaptadorDeporte):
         self._cliente = cliente
         self._temporada = temporada
         self.deporte = deporte
-        # Not used for the write (the ejecutor keeps the primary league row, see D-17).
+        # Not used for the write (the ejecutor keeps the primary league row, see D-26).
         self.proveedor_liga_id = LIGAS[deporte]
 
     def peticiones_usadas(self) -> int:

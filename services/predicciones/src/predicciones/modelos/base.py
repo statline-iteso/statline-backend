@@ -8,7 +8,7 @@ import pandas as pd
 from predicciones.errores import DatosInsuficientesError
 from predicciones.schemas import Deporte, TipoInferencia
 
-FRACCION_TEST = 0.8  # the first 80 % of dates train, the last 20 % validate (D-18)
+FRACCION_TEST = 0.8  # the first 80 % of dates train, the last 20 % validate (D-30)
 
 
 @dataclass(frozen=True)

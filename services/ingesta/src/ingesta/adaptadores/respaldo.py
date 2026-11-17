@@ -5,7 +5,7 @@ backoff (a Retry-After header on 429 is honoured, capped); other 4xx fail at onc
 configuration bugs. Exhausted retries raise ProveedorCaidoError, the signal to switch providers.
 
 Provider ids are namespaced as `<proveedor>:<id>` so an id from a fallback can never collide with an
-API-Sports id in the unique keys of `partido`, `equipo` and `jugador` (D-17).
+API-Sports id in the unique keys of `partido`, `equipo` and `jugador` (D-26).
 """
 
 import time

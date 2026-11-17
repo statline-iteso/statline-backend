@@ -1,4 +1,4 @@
-"""NBA through balldontlie.io API v1: fallback when API-Sports is unavailable (SL-20, D-17).
+"""NBA through balldontlie.io API v1: fallback when API-Sports is unavailable (SL-20, D-26).
 
 Built from the balldontlie documentation, not from a live response. `/games?dates[]=` lists a day,
 `/stats?game_ids[]=` returns the player lines of one game (cursor pagination on `meta.next_cursor`).
@@ -56,7 +56,7 @@ _REQUERIDAS = ("puntos", "rebotes", "asistencias")
 class AdaptadorBalldontlie(AdaptadorDeporte):
     deporte = Deporte.BASQUETBOL
     proveedor = PROVEEDOR
-    # Not a real league id here: the ejecutor writes into the API-Sports league row (see D-17).
+    # Not a real league id here: the ejecutor writes into the API-Sports league row (see D-26).
     proveedor_liga_id = "NBA"
 
     def __init__(self, cliente: ClienteRespaldo, temporada: str) -> None:

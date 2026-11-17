@@ -1,4 +1,4 @@
-"""Primary adapter plus one fallback provider, for the rest of a run (SL-20, D-17).
+"""Primary adapter plus one fallback provider, for the rest of a run (SL-20, D-26).
 
 The first provider failure that means "unavailable" (quota exhausted or retries exhausted on 5xx,
 429 or network) switches the run to the fallback for every later call. The providers actually used
