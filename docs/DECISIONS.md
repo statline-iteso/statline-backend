@@ -27,6 +27,8 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-16 | 2026-11-16 | `DELETE /api/listas/:id/elementos/:ref` takes the jugador/equipo id (`refId`), not the elemento id | Decided |
 | D-17 | 2026-11-16 | Box-score sport comes from the partido's liga; metrics are validated by Ajv against the schema on every write and on batches (all-or-nothing) | Decided |
 | D-18 | 2026-11-16 | JSON body limit 1 MB so a 500-line batch fits; larger bodies get 413 | Decided |
+| D-15 | 2026-11-16 | Manual ingestion runs create a Job from the CronJob via the in-cluster API, behind `LanzadorIngesta` (`INGESTA_LANZADOR`, default disabled) | Decided |
+| D-16 | 2026-11-16 | Alerts are owner-scoped; ADMIN may read and list all but change only its own; referenced jugador/equipo are validated | Decided |
 
 ## 2. Details
 
@@ -41,6 +43,11 @@ Redis backs the catalog cache and the rate limiters (`rate-limit-redis`). Withou
 
 ### D-16 · Catalog cache invalidation by version counter
 Standings, form and box scores depend on several resources, so per-resource invalidation would need a dependency map. Instead each key embeds one catalog version; a successful catalog write INCRs it and old keys expire by TTL. This needs no SCAN and cannot race a stale write into the new version. Trade-off: any catalog write invalidates all catalog cache entries, which is acceptable because writes are rare and ADMIN-only.
+### D-15 · Manual ingestion through the Kubernetes API
+The api creates a Job from `spec.jobTemplate` of the existing CronJob, so the sport's image, args and env stay defined once in infra. Trade-off: the api needs RBAC `create jobs` and `get cronjobs` in its namespace. The launcher is an interface and defaults to disabled (503) so local and test environments never touch a cluster. The https module is used instead of fetch because Node's fetch cannot take the cluster CA without undici, which is not a dependency. Not chosen: a Job runner inside the api (no isolation, one more process) and a queue (SL-31 scope).
+
+### D-16 · Alert ownership
+Alerts carry `usuarioId` from the JWT. Only ADMIN may list and read other users' alerts, for administration; changes are owner-only even for ADMIN. Referenced ids are checked in the api (400 with the field) because the DB only checks the FK, which would surface as a 500.
 
 ### D-09 · Express 4 and CommonJS
 The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test configuration; async errors are forwarded with a small `ah()` wrapper.

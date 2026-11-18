@@ -6,6 +6,7 @@ import { createTokenService } from "./lib/auth";
 import { createMetrics } from "./lib/metrics";
 import { createRedis } from "./lib/redis";
 import { createMetricasValidator } from "./lib/metricas";
+import { crearLanzadorIngesta } from "./lib/ingesta-lanzador";
 
 const config = loadConfig();
 const logger = pino({ level: config.LOG_LEVEL });
@@ -22,6 +23,7 @@ const app = createApp({
   metrics: createMetrics(),
   schemasDir: config.SCHEMAS_DIR,
   metricas: createMetricasValidator(config.SCHEMAS_DIR),
+  lanzador: crearLanzadorIngesta(config.INGESTA_LANZADOR),
   tokens: createTokenService({
     accessSecret: config.JWT_SECRET,
     refreshSecret: config.JWT_REFRESH_SECRET,
