@@ -35,6 +35,9 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-18 | 2026-11-16 | balldontlie and TheSportsDB mappings built from their documentation, not from live responses | Decided (unverified) |
 | D-15 | 2026-11-16 | Model artifacts stored as bytea in `modelo_artefacto`, referenced as `db://<id>` | Decided |
 | D-16 | 2026-11-16 | Synthetic demo data via `ingesta seed-demo` (provider `demo`, `demo-` ids), opt-in with `--confirmar`, never in CronJobs | Decided |
+| D-17 | 2026-11-16 | Models are validated on a date-based holdout (last 20 %) and the stored bundle is fitted on the training part only | Decided |
+| D-18 | 2026-11-16 | Activation rule: a candidate is activated only if it beats its baseline and is no worse than the active model on the same metric | Decided |
+| D-19 | 2026-11-16 | Feature and target choices of the first models (windows of 10, NBA/NFL ties dropped, NFL targets by group) | Decided |
 
 ## 2. Details
 
@@ -46,6 +49,19 @@ Each trained model is serialized with joblib and stored in `modelo_artefacto.con
 
 ### D-16 · Synthetic demo data
 `ingesta seed-demo` generates deterministic data (`random.Random(semilla)`) with the same normalized records the adapters return, validates every metrics line against the JSON Schemas and writes through `RepositorioPostgres`. It exists so the predictions work and the frontend can be developed without a live API-Sports quota. It requires `--confirmar`, records an `ejecucion_ingesta` row with proveedor `demo`, and is referenced by no CronJob.
+
+### D-17 · Holdout and what gets stored
+Train on the first 80 % of distinct dates, validate on the rest. The cut falls between dates, so a game never appears on both sides. The artifact is the model fitted on the training part, so the stored `metrica_error` describes exactly the bytes in `modelo_artefacto`. Trade-off: the last 20 % of games do not feed the stored model; a later version can refit on all data and keep the holdout metric as a validation record.
+
+### D-18 · Activation rule
+A new version is activated only when its metric is strictly better than its baseline (log-loss below the class priors; MAE below the rolling average). If another version is already active for the same (deporte, tipo), the candidate must also be no worse than it (`metrica <= metrica_error` of the active row). Both metrics are on the same name, so the comparison is valid, although each holdout covers a different period. Activation is one transaction that locks the group. A candidate that does not beat its baseline is never activated, even when nothing is active: the endpoint then reports that there is no active model.
+
+### D-19 · First model choices
+- Team windows of 10 games; rest days capped at 14. Each season is a separate `liga` row with its own teams, so history does not cross seasons (a season start has no history, imputed).
+- NBA and NFL outcomes are `L`/`V`: tied games are dropped from training and from the holdout. Futbol keeps `E`.
+- NFL player targets are the `yardas` of the passing, rushing and receiving groups. A row without that group is not a training row for that target.
+- Gradient boosting: 200 trees, depth 3, learning rate 0.05, subsample 0.8, fixed seed.
+- Artifacts are pickles (joblib). Load only bytes that this service wrote to the database; a compromised database would mean code execution in the predicciones pod.
 
 ### D-05 · JSONB instead of tables per sport
 Cross-sport queries (a player's lines, a game's box score) stay one table; sport-specific aggregation uses `(metricas->>'puntos')::int`. The engine doesn't validate JSONB shape, hence D-07 and strict schemas.
