@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { z, type ZodTypeAny } from "zod";
 import { ah } from "./async";
 import { notFound } from "./errors";
+import type { CatalogCache } from "./cache";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Prisma delegates have per-model generic
    signatures; this factory only forwards validated args, so a structural type is enough. */
@@ -37,6 +38,8 @@ export interface CrudOptions<Q extends ZodTypeAny> {
   writeGuard?: RequestHandler;
   /** Omit standard operations (e.g. EjecucionIngesta only exposes GET and DELETE). */
   only?: Array<"list" | "get" | "create" | "update" | "delete">;
+  /** Catalog cache: reads of list/get are cached, successful writes invalidate. */
+  cache?: CatalogCache;
 }
 
 /**
@@ -47,10 +50,13 @@ export function createCrudRouter<Q extends ZodTypeAny>(opts: CrudOptions<Q>): Ro
   const router = Router();
   const enabled = new Set(opts.only ?? ["list", "get", "create", "update", "delete"]);
   const guard: RequestHandler = opts.writeGuard ?? ((_req, _res, next) => next());
+  const read: RequestHandler[] = opts.cache ? [opts.cache.read] : [];
+  const write: RequestHandler[] = opts.cache ? [opts.cache.invalidate] : [];
 
   if (enabled.has("list")) {
     router.get(
       "/",
+      ...read,
       ah(async (req, res) => {
         const { page, pageSize } = PaginationSchema.parse(req.query);
         const where = opts.where(opts.filterSchema.parse(req.query));
@@ -72,6 +78,7 @@ export function createCrudRouter<Q extends ZodTypeAny>(opts: CrudOptions<Q>): Ro
   if (enabled.has("get")) {
     router.get(
       "/:id",
+      ...read,
       ah(async (req, res) => {
         const { id } = IdParamSchema.parse(req.params);
         const item = await opts.delegate.findUnique({ where: { id }, include: opts.include });
@@ -85,6 +92,7 @@ export function createCrudRouter<Q extends ZodTypeAny>(opts: CrudOptions<Q>): Ro
     router.post(
       "/",
       guard,
+      ...write,
       ah(async (req, res) => {
         const data = opts.createSchema.parse(req.body);
         res.status(201).json(await opts.delegate.create({ data }));
@@ -96,6 +104,7 @@ export function createCrudRouter<Q extends ZodTypeAny>(opts: CrudOptions<Q>): Ro
     router.put(
       "/:id",
       guard,
+      ...write,
       ah(async (req, res) => {
         const { id } = IdParamSchema.parse(req.params);
         const data = opts.updateSchema.parse(req.body);
@@ -108,6 +117,7 @@ export function createCrudRouter<Q extends ZodTypeAny>(opts: CrudOptions<Q>): Ro
     router.delete(
       "/:id",
       guard,
+      ...write,
       ah(async (req, res) => {
         const { id } = IdParamSchema.parse(req.params);
         await opts.delegate.delete({ where: { id } });
