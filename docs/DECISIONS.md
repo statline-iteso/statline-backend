@@ -29,6 +29,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-18 | 2026-11-16 | JSON body limit 1 MB so a 500-line batch fits; larger bodies get 413 | Decided |
 | D-15 | 2026-11-16 | Manual ingestion runs create a Job from the CronJob via the in-cluster API, behind `LanzadorIngesta` (`INGESTA_LANZADOR`, default disabled) | Decided |
 | D-16 | 2026-11-16 | Alerts are owner-scoped; ADMIN may read and list all but change only its own; referenced jugador/equipo are validated | Decided |
+| D-15 | 2026-11-16 | Liga MX (api-football, league 262) mapped from the provider documentation; unverified against a live response | Decided (limitation) |
 
 ## 2. Details
 
@@ -61,6 +62,8 @@ The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test con
 - Box-score field names from api-basketball were mapped from documentation and recorded fixtures; confirm against a live response once a key is available.
 - Ingestion writes straight to PostgreSQL, bypassing the api, so catalog cache entries can be stale for up to `CACHE_TTL_S` (60 s) after an ingestion run.
 - Rate limits are per client IP and behind one trusted proxy hop; a Redis outage makes the limit per replica instead of global.
+- Liga MX (D-15): the api-football field mapping, the status codes and the `round` → `jornada` parsing come from the v3 documentation. The fixtures in `services/ingesta/tests/fixtures/ligamx_*.json` are synthetic, shaped like that documentation (player and club names are invented). Confirm the field names, that `passes.accuracy` is a count of accurate passes (stored as a percentage of `passes.total`), the string-typed `games.rating`, and the position values against a live response once a key is available.
+- Liga MX metrics: a provider null on a required metric (`goles`, `asistencias`) is stored as 0, a null on an optional metric is left out of `metricas`. Squad players with null minutes (never on the pitch) are not stored.
 
 ## 4. Future work
 

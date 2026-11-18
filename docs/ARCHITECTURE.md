@@ -103,6 +103,7 @@ Redis 7 is optional. Without `REDIS_URL` the api runs with the cache bypassed an
 - `adaptadores/base.py` — `AdaptadorDeporte`: `obtener_partidos(fecha)`, `obtener_estadisticas(partido_id)` (I/O, raw payloads) and `normalizar(…)`, `normalizar_estadisticas(…)` (pure).
 - `adaptadores/api_sports.py` — shared client: `x-apisports-key`, retries on 429/5xx with exponential backoff, a per-run request budget (`API_SPORTS_DAILY_QUOTA`, default 95 of the free plan's ~100/day).
 - `adaptadores/basquetbol.py` — NBA (league 12). pandas flattens box-score lines, drops DNPs and maps provider fields to schema keys.
+- `adaptadores/futbol.py` — Liga MX (api-football v3, league 262, `/fixtures` and `/fixtures/players`). Plain Python walks the nested team → players → statistics[0] payload, maps the fixture status codes, parses `league.round` into `jornada` and keeps nulls out of `metricas` (required keys default to 0). Field mapping built from the documentation, see D-15.
 - `ejecutor.py` — one run: record `EN_CURSO`, walk each day of the range, upsert games, fetch box scores only for `FINALIZADO` games, validate each line (invalid lines are skipped and counted), finish with `EXITOSA`/`FALLIDA`. Quota exhaustion keeps what was stored.
 - `repositorio.py` — psycopg upserts on the unique keys of §2, one transaction per game and per line.
 - `cli.py` — `ingesta run <deporte> [--desde] [--hasta]` (defaults: yesterday and today, UTC); exit 1 on failure.
