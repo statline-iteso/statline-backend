@@ -1,18 +1,24 @@
 import { Router, type RequestHandler } from "express";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { ah } from "../lib/async";
+import type { CatalogCache } from "../lib/cache";
 import { createCrudRouter, IdParamSchema } from "../lib/crud";
-import { notFound } from "../lib/errors";
+import { AppError, notFound } from "../lib/errors";
+import { metricasNumericas } from "../lib/metricas-rutas";
+import { promediosJugador, tendenciaJugador } from "../lib/agregados";
 import { calcularForma, calcularPosiciones, type ResultadoPartido } from "../lib/standings";
 import {
   CreateEquipoSchema,
   CreateJugadorSchema,
   CreateLigaSchema,
+  CompararQuerySchema,
   CreatePartidoSchema,
   EquipoFilterSchema,
   JugadorFilterSchema,
   LigaFilterSchema,
   PartidoFilterSchema,
+  PromediosQuerySchema,
+  TendenciaQuerySchema,
   UpdateEquipoSchema,
   UpdateJugadorSchema,
   UpdateLigaSchema,
@@ -23,6 +29,10 @@ interface Deps {
   prisma: PrismaClient;
   /** Guard for POST/PUT/DELETE: catalog data comes from ingestion, so only ADMIN edits it. */
   adminOnly: RequestHandler;
+  /** Opt-in read cache for GET routes and invalidation on writes (SL-31). */
+  cache: CatalogCache;
+  /** Directory with <deporte>.schema.json, relative to the repo root (SCHEMAS_DIR). */
+  schemasDir?: string;
 }
 
 const finalizados = (where: Prisma.PartidoWhereInput): Prisma.PartidoWhereInput => ({
@@ -45,11 +55,12 @@ const toResultado = (p: {
 });
 
 /** /api/ligas · filter ?deporte= · GET /:id/posiciones · GET /:id/calendario */
-export function ligasRouter({ prisma, adminOnly }: Deps): Router {
+export function ligasRouter({ prisma, adminOnly, cache }: Deps): Router {
   const router = Router();
 
   router.get(
     "/:id/posiciones",
+    cache.read,
     ah(async (req, res) => {
       const { id } = IdParamSchema.parse(req.params);
       const liga = await prisma.liga.findUnique({
@@ -79,6 +90,7 @@ export function ligasRouter({ prisma, adminOnly }: Deps): Router {
 
   router.get(
     "/:id/calendario",
+    cache.read,
     ah(async (req, res) => {
       const { id } = IdParamSchema.parse(req.params);
       const partidos = await prisma.partido.findMany({
@@ -103,17 +115,19 @@ export function ligasRouter({ prisma, adminOnly }: Deps): Router {
       where: (f) => (f.deporte ? { deporte: f.deporte } : {}),
       orderBy: { nombre: "asc" },
       writeGuard: adminOnly,
+      cache,
     }),
   );
   return router;
 }
 
 /** /api/equipos · GET /:id/forma */
-export function equiposRouter({ prisma, adminOnly }: Deps): Router {
+export function equiposRouter({ prisma, adminOnly, cache }: Deps): Router {
   const router = Router();
 
   router.get(
     "/:id/forma",
+    cache.read,
     ah(async (req, res) => {
       const { id } = IdParamSchema.parse(req.params);
       const equipo = await prisma.equipo.findUnique({ where: { id } });
@@ -141,18 +155,78 @@ export function equiposRouter({ prisma, adminOnly }: Deps): Router {
       where: () => ({}),
       orderBy: { nombre: "asc" },
       writeGuard: adminOnly,
+      cache,
     }),
   );
   return router;
 }
 
+const REF_JUGADOR = { id: true, nombre: true, deporte: true, posicion: true } as const;
+
 /**
- * /api/jugadores · filters ?q= and ?deporte=.
- * TODO(SL-27): GET /:id/promedios, GET /:id/tendencia and GET /comparar?ids= (register them
- * above router.use so they win over /:id).
+ * /api/jugadores · filters ?q= and ?deporte= · GET /:id/promedios?ultimos= ·
+ * GET /:id/tendencia?metrica=&n= · GET /comparar?ids=a,b[,c,d].
+ * The aggregate routes are registered above router.use so they win over /:id.
  */
-export function jugadoresRouter({ prisma, adminOnly }: Deps): Router {
+export function jugadoresRouter({ prisma, adminOnly, cache, schemasDir }: Deps): Router {
   const router = Router();
+
+  router.get(
+    "/comparar",
+    ah(async (req, res) => {
+      const { ids } = CompararQuerySchema.parse(req.query);
+      const encontrados = await prisma.jugador.findMany({
+        where: { id: { in: ids } },
+        select: REF_JUGADOR,
+      });
+      if (encontrados.length !== ids.length) throw notFound("Jugador");
+      const deporte = encontrados[0]!.deporte;
+      if (encontrados.some((j) => j.deporte !== deporte)) {
+        throw new AppError("VALIDATION_ERROR", 400, "Los jugadores deben ser del mismo deporte");
+      }
+      const rutas = metricasNumericas(deporte, schemasDir);
+      const porId = new Map(encontrados.map((j) => [j.id, j]));
+      // Sequential on purpose: one player's queries at a time keeps the connection pool calm.
+      const jugadores = [];
+      for (const id of ids) {
+        const resumen = await promediosJugador(prisma, id, rutas);
+        jugadores.push({ jugador: porId.get(id)!, ...resumen });
+      }
+      res.json({ deporte, jugadores });
+    }),
+  );
+
+  router.get(
+    "/:id/promedios",
+    ah(async (req, res) => {
+      const { id } = IdParamSchema.parse(req.params);
+      const { ultimos } = PromediosQuerySchema.parse(req.query);
+      const jugador = await prisma.jugador.findUnique({ where: { id }, select: REF_JUGADOR });
+      if (!jugador) throw notFound("Jugador");
+      const rutas = metricasNumericas(jugador.deporte, schemasDir);
+      const resumen = await promediosJugador(prisma, id, rutas, ultimos);
+      res.json({ jugador, ultimos: ultimos ?? null, ...resumen });
+    }),
+  );
+
+  router.get(
+    "/:id/tendencia",
+    ah(async (req, res) => {
+      const { id } = IdParamSchema.parse(req.params);
+      const { metrica, n } = TendenciaQuerySchema.parse(req.query);
+      const jugador = await prisma.jugador.findUnique({ where: { id }, select: REF_JUGADOR });
+      if (!jugador) throw notFound("Jugador");
+      const rutas = metricasNumericas(jugador.deporte, schemasDir);
+      if (!rutas.includes(metrica)) {
+        throw new AppError("VALIDATION_ERROR", 400, "Métrica desconocida para el deporte", {
+          metricasValidas: rutas,
+        });
+      }
+      const serie = await tendenciaJugador(prisma, id, metrica, n);
+      res.json({ jugadorId: id, metrica, n, serie });
+    }),
+  );
+
   router.use(
     createCrudRouter({
       name: "Jugador",
@@ -167,17 +241,19 @@ export function jugadoresRouter({ prisma, adminOnly }: Deps): Router {
       orderBy: { nombre: "asc" },
       include: { equipo: { select: { id: true, nombre: true, abreviatura: true } } },
       writeGuard: adminOnly,
+      cache,
     }),
   );
   return router;
 }
 
 /** /api/partidos · filters ?fecha= (YYYY-MM-DD, UTC day) and ?jornada= · GET /:id/boxscore */
-export function partidosRouter({ prisma, adminOnly }: Deps): Router {
+export function partidosRouter({ prisma, adminOnly, cache }: Deps): Router {
   const router = Router();
 
   router.get(
     "/:id/boxscore",
+    cache.read,
     ah(async (req, res) => {
       const { id } = IdParamSchema.parse(req.params);
       const partido = await prisma.partido.findUnique({
@@ -222,6 +298,7 @@ export function partidosRouter({ prisma, adminOnly }: Deps): Router {
         visita: { select: { id: true, nombre: true, abreviatura: true } },
       },
       writeGuard: adminOnly,
+      cache,
     }),
   );
   return router;

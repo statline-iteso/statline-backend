@@ -16,7 +16,13 @@ export function createMetrics() {
     buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
     registers: [registry],
   });
-  return { registry, httpRequests, httpDuration };
+  const cacheRequests = new client.Counter({
+    name: "statline_cache_requests_total",
+    help: "Catalog cache lookups by result: hit, miss or bypass (Redis unset or failing)",
+    labelNames: ["result"] as const,
+    registers: [registry],
+  });
+  return { registry, httpRequests, httpDuration, cacheRequests };
 }
 
 export type Metrics = ReturnType<typeof createMetrics>;
