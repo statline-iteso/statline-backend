@@ -36,6 +36,21 @@ Full description in infra [`docs/modelo-datos.md`](https://github.com/statline-i
 - `src/lib/crud.ts` — `createCrudRouter()`: the five standard operations, pagination, validation, `writeGuard`. Each resource router registers its extra routes **before** mounting it so they win over `/:id`.
 - `src/lib/standings.ts` — pure standings and form logic.
 - `src/routes/` — `health`, `usuarios` (auth + users), `catalogo` (ligas, equipos, jugadores, partidos), `schemas` (zod).
+- `src/lib/redis.ts` — `createRedis()`: the ioredis client, created only when `REDIS_URL` is set (§3.5).
+- `src/lib/cache.ts` — `createCatalogCache()`: read cache and write invalidation for the catalog (§3.5).
+- `src/lib/rate-limit.ts` — `createRateLimiters()`: global `/api` and login limiters with Redis and memory fallback (§3.5).
+- `src/lib/metricas.ts` — `createMetricasValidator(dir)`: Ajv (2020-12) over `schemas/<deporte>.schema.json`, compiled once at boot.
+- `src/routes/` — `health`, `usuarios` (auth + users), `catalogo` (ligas, equipos, jugadores, partidos), `estadisticas` (box-score lines, batch), `listas` (watchlists), `schemas` (zod).
+- `src/routes/` — `health`, `usuarios` (auth + users), `catalogo` (ligas, equipos, jugadores, partidos), `alertas`, `ingestas`, `schemas` (zod).
+
+### 3.5 Manual ingestion launcher (SL-30)
+
+`POST /api/ingestas/ejecutar` calls a `LanzadorIngesta` (`src/lib/ingesta-lanzador.ts`, injected into `createApp` as `lanzador`), chosen by `INGESTA_LANZADOR`:
+
+- `deshabilitado` (default): 503 `NOT_CONFIGURED`.
+- `kubernetes`: `src/lib/k8s.ts` calls the in-cluster API with the pod's service account (`/var/run/secrets/kubernetes.io/serviceaccount`; `https` module, because Node's fetch cannot pin the cluster CA). It GETs `cronjobs/ingesta-<deporte>` in the pod's namespace and POSTs a Job `ingesta-<deporte>-manual-<ms>` built from `spec.jobTemplate`, with an ownerReference to the CronJob (`controller: false`, so deleting the CronJob garbage-collects it). Returns 202 `{job}`. Errors: 503 `NOT_CONFIGURED` if the CronJob is missing, 503 `K8S_ERROR` for API failures.
+
+**RBAC required (infra):** the api ServiceAccount needs a namespaced `Role` with `get` on `cronjobs` and `create` on `jobs` in API group `batch`, bound by a `RoleBinding`. Nothing broader is needed.
 
 ### 3.2 Routes
 
@@ -43,23 +58,45 @@ The full table with examples is in infra [`docs/api.md`](https://github.com/stat
 
 | Route | Notes |
 |---|---|
-| `GET /healthz`, `GET /readyz`, `GET /metrics` | readyz runs `SELECT 1` |
+| `GET /healthz`, `GET /readyz`, `GET /metrics` | readyz runs `SELECT 1`; with `REDIS_URL` also a PING (503 if either fails; body `checks` names the failing one). Probes and `/metrics` are never rate limited |
 | `POST /api/auth/login`, `POST /api/auth/refresh` | access 15 min, refresh 7 days; refresh re-reads the role |
 | `/api/usuarios` CRUD | sign-up public (always USUARIO); self-or-admin; only ADMIN changes roles |
 | `/api/ligas` CRUD `?deporte=` · `/:id/posiciones` · `/:id/calendario` | |
 | `/api/equipos` CRUD · `/:id/forma` | last 5 finished games, "G/E/P" oldest first |
 | `/api/jugadores` CRUD `?q=&deporte=` | case-insensitive name search |
+| `/api/jugadores/:id/promedios?ultimos=` | averages per numeric metric (`metricas` JSONB), games count, avg minutes; NFL groups use dotted keys (`pase.yardas`) |
+| `/api/jugadores/:id/tendencia?metrica=&n=` | last `n` (default 10) games where the metric was recorded, oldest first; `metrica` must be numeric in the sport's schema, else 400 |
+| `/api/jugadores/comparar?ids=a,b[,c,d]` | 2–4 unique players of one sport (400 otherwise), each with ref + promedios |
 | `/api/partidos` CRUD `?fecha=&jornada=` · `/:id/boxscore` | `fecha` is a UTC day |
+| `/api/estadisticas` CRUD `?jugadorId=&partidoId=` · `POST /lote` | reads: autenticado; writes: ADMIN. The sport comes from the partido's liga; `metricas` is validated against its schema. `POST /lote` takes a JSON array of 1–500 lines `{partidoId, jugadorId, equipoId, minutos?, metricas}`, upserts on `(partidoId, jugadorId)` in one transaction and answers `200 {procesadas, data}`. Any invalid line rejects the whole batch with 400 and `details: [{index, path, message}]`. |
+| `/api/listas` CRUD · `POST /:id/elementos` `{tipo: "JUGADOR"\|"EQUIPO", refId}` · `DELETE /:id/elementos/:ref` | owner only (usuarioId from the JWT); ADMIN can list and read all. Another user's list is 404. `:ref` is the jugador or equipo id (`refId`), not the elemento id. `GET /:id` includes `elementos`. Duplicate → 409; unknown jugador/equipo → 404. |
 
-Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`).
+Planned: SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+| `/api/alertas` CRUD (dueño) | `usuarioId` from the JWT. Lists are scoped to the caller; ADMIN lists and reads all but changes only its own. `POST`/`PUT` validate `tipo`: `LESION` and `UMBRAL` need `jugadorId` (`UMBRAL` also `condicion: {metrica, operador: > >= < <= =, valor}`), `INICIO_PARTIDO` needs `jugadorId` or `equipoId`. Referenced jugador/equipo must exist (400 otherwise). `PUT {activa}` toggles; a full definition replaces the alert. Non-owner: 403 |
+| `/api/ingestas` `GET` (`?deporte=&estatus=`, newest first) · `GET /:id` · `DELETE /:id` · `POST /ejecutar` `{deporte}` → 202 `{job}` | ADMIN only. `ejecutar` goes through `LanzadorIngesta` (§3.5): 503 `NOT_CONFIGURED` when `INGESTA_LANZADOR=deshabilitado` |
+
+Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-31 (Redis).
 
 ### 3.3 Errors
 
-`{ "error": { "code", "message", "details"? } }`. `AppError` → its status; `ZodError` → 400 `VALIDATION_ERROR`; Prisma `P2025` → 404, `P2002` → 409 `DUPLICATE`; anything else → 500 `INTERNAL` (logged, never echoed).
+`{ "error": { "code", "message", "details"? } }`. `AppError` → its status; `ZodError` → 400 `VALIDATION_ERROR`; Prisma `P2025` → 404, `P2002` → 409 `DUPLICATE`, `P2003` (missing reference) → 400 `INVALID_REFERENCE`; body over 1 MB → 413 `PAYLOAD_TOO_LARGE`; anything else → 500 `INTERNAL` (logged, never echoed). Metric errors use `VALIDATION_ERROR` with `details: [{path, message}]` (`path` like `metricas.puntos`).
 
 ### 3.4 Auth
 
 JWT HS256 with separate secrets for access and refresh tokens. Claims: `sub` (user id), `rol`. Catalog reads need any valid token; catalog writes need ADMIN (data normally comes from ingestion).
+
+### 3.5 Redis: catalog cache and rate limiting (SL-31)
+
+Redis 7 is optional. Without `REDIS_URL` the api runs with the cache bypassed and rate limits kept in process memory. Any Redis failure degrades to the same behaviour and never fails a request.
+
+- **Client.** `ioredis` with lazy connect, no offline queue (commands fail fast while disconnected), 2 s connect timeout and capped exponential reconnect (200 ms doubling, max 10 s). Closed on SIGTERM. Readiness PINGs with a 500 ms timeout.
+- **Catalog cache.** Opt-in per route: list and `GET /:id` of ligas, equipos, jugadores and partidos, plus `/api/ligas/:id/posiciones|calendario`, `/api/equipos/:id/forma` and `/api/partidos/:id/boxscore`. Key: `statline:cache:catalogo:v<version>:GET:<originalUrl>`, TTL `CACHE_TTL_S`. Only 200 bodies are stored; responses carry `X-Cache: HIT|MISS`.
+- **Invalidation.** Every successful POST/PUT/DELETE on a catalog route INCRs one catalog-wide version key, so all earlier entries become unreachable at once and expire by TTL. One version instead of per-resource prefixes because standings, form and box scores depend on several resources, and no SCAN is needed. The bump runs before the write response is sent. Writes made directly to PostgreSQL (ingesta) are not seen by the API, so they are visible after at most `CACHE_TTL_S`.
+- **Metric.** `statline_cache_requests_total{result="hit|miss|bypass"}`.
+- **Rate limits.** `express-rate-limit` with `rate-limit-redis`. Fixed window of one minute per client IP: `RATE_LIMIT_PER_MIN` for all `/api` requests, `RATE_LIMIT_LOGIN_PER_MIN` for `POST /api/auth/login`. Keys are `statline:rl:global:*` and `statline:rl:login:*`. 429 body: `{ "error": { "code": "RATE_LIMITED", ... } }` with draft-7 `RateLimit` headers. If a Redis call fails, the hit is counted in a per-replica memory store, so the effective limit is per replica during an outage.
+- **Proxy.** `trust proxy` is `1`: the api sits behind exactly one hop (ingress-nginx), so the client IP is the last `X-Forwarded-For` entry added by ingress. If another proxy is added in front, change this value in `src/app.ts` or the rate limit will count the proxy's IP.
 
 ## 4. ingesta
 
@@ -86,6 +123,9 @@ FastAPI app with `/healthz`, `/readyz`, `/metrics`, and the request contract (`s
 
 ## 7. Configuration
 
+All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`. api Redis and limit settings (not secret): `REDIS_URL` (optional; unset = no Redis), `CACHE_TTL_S` (60), `RATE_LIMIT_PER_MIN` (300), `RATE_LIMIT_LOGIN_PER_MIN` (10).
+
+`SCHEMAS_DIR` (api and ingesta) is the directory with `<deporte>.schema.json`. Unset in the api, it resolves to the repo's `schemas/`; the api image sets `/app/schemas`.
 All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY`. Ingesta fallback settings: `FALLBACK_HABILITADO` (default `true`), `THESPORTSDB_API_KEY` (default `3`, the public test key; not secret).
 
 ## 8. Deployment contract for the infra chart
@@ -98,9 +138,17 @@ All services read environment variables (see `.env.example`). Secrets: `DATABASE
 | Liveness / readiness | `/healthz` / `/readyz` | `/healthz` / `/readyz` | `/healthz` / `/readyz` (serve) |
 | Metrics | `/metrics` | `/metrics` | `/metrics` (serve) |
 | User | `node` (1000) | 10001 | 10001 |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `CACHE_TTL_S`, `RATE_LIMIT_PER_MIN`, `RATE_LIMIT_LOGIN_PER_MIN`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`, `SCHEMAS_DIR` (image default `/app/schemas`) | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`; `SCHEMAS_DIR` is fixed in the image (`/app/schemas`) | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`, `INGESTA_LANZADOR` (`deshabilitado` \| `kubernetes`) | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY` |
 | ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA`, `FALLBACK_HABILITADO`, `THESPORTSDB_API_KEY` |
 | Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (Key Vault secret `balldontlie-api-key`, to be created by statline-infra; optional, empty disables the NBA fallback) |
 | initContainer | same image: `["node_modules/.bin/prisma","migrate","deploy"]` | — | — |
 | Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (PVC or emptyDir) | `/tmp` |
+
+The api image copies `schemas/` to `/app/schemas` (the api reads metric keys from it, SL-27). Outside Docker, `SCHEMAS_DIR` defaults to the repo's `schemas/`.
+The api ServiceAccount needs the namespaced Role described in §3.5 when `INGESTA_LANZADOR=kubernetes`; the pod gets `KUBERNETES_SERVICE_HOST`/`PORT` and the token mount from Kubernetes.
 
 Seasons in `TEMPORADA_*` must match the seeded `liga.temporada` values (`2025-2026`, `2026`, `2026`). Exit code ≠ 0 from `ingesta run` marks the Job failed.
