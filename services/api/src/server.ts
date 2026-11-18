@@ -4,14 +4,20 @@ import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { createTokenService } from "./lib/auth";
 import { createMetrics } from "./lib/metrics";
+import { createRedis } from "./lib/redis";
 
 const config = loadConfig();
 const logger = pino({ level: config.LOG_LEVEL });
 const prisma = new PrismaClient();
+// Redis is optional: without REDIS_URL the cache is bypassed and limits stay in memory.
+const redis = config.REDIS_URL ? createRedis(config.REDIS_URL, logger) : undefined;
 
 const app = createApp({
   prisma,
   logger,
+  redis,
+  cacheTtlS: config.CACHE_TTL_S,
+  rateLimits: { global: config.RATE_LIMIT_PER_MIN, login: config.RATE_LIMIT_LOGIN_PER_MIN },
   metrics: createMetrics(),
   schemasDir: config.SCHEMAS_DIR,
   tokens: createTokenService({
@@ -28,7 +34,7 @@ const server = app.listen(config.PORT, () => logger.info({ port: config.PORT }, 
 const shutdown = (signal: string) => {
   logger.info({ signal }, "shutting down");
   server.close(() => {
-    void prisma.$disconnect().finally(() => process.exit(0));
+    void Promise.all([prisma.$disconnect(), redis?.close()]).finally(() => process.exit(0));
   });
   setTimeout(() => process.exit(1), 10_000).unref();
 };
