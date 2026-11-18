@@ -33,6 +33,7 @@ class BundleJugador:
     objetivos: tuple[str, ...]
     modelos: dict[str, Any]  # objetivo -> Pipeline(imputer, GradientBoostingRegressor)
     features: tuple[str, ...]
+    ventana: int = VENTANA_DEFAULT  # games of history per player: inference must use the same
 
 
 def _pipeline_objetivo(estimadores: int) -> Pipeline:
@@ -106,6 +107,7 @@ def entrenar_jugador(
         objetivos=objetivos,
         modelos=modelos,
         features=tuple(features.columns),
+        ventana=ventana,
     )
     return ResultadoEntrenamiento(
         deporte=deporte,

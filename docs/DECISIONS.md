@@ -33,13 +33,26 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-16 | 2026-11-16 | Liga MX (api-football, league 262) mapped from the provider documentation; unverified against a live response | Decided (limitation) |
 | D-17 | 2026-11-16 | Fallback providers (balldontlie for NBA, TheSportsDB for NFL and Liga MX) take over for the rest of a run when API-Sports is out of quota or down; duplicates across providers are not merged | Decided (limitation) |
 | D-18 | 2026-11-16 | balldontlie and TheSportsDB mappings built from their documentation, not from live responses | Decided (unverified) |
+| D-14 | 2026-11-16 | Pending predicciones routes answer 501 with the issue id | Superseded by D-20 (SL-37) |
 | D-15 | 2026-11-16 | Model artifacts stored as bytea in `modelo_artefacto`, referenced as `db://<id>` | Decided |
 | D-16 | 2026-11-16 | Synthetic demo data via `ingesta seed-demo` (provider `demo`, `demo-` ids), opt-in with `--confirmar`, never in CronJobs | Decided |
 | D-17 | 2026-11-16 | Models are validated on a date-based holdout (last 20 %) and the stored bundle is fitted on the training part only | Decided |
 | D-18 | 2026-11-16 | Activation rule: a candidate is activated only if it beats its baseline and is no worse than the active model on the same metric | Decided |
 | D-19 | 2026-11-16 | Feature and target choices of the first models (windows of 10, NBA/NFL ties dropped, NFL targets by group) | Decided |
+| D-20 | 2026-11-16 | Prediction endpoints are synchronous; one autocommit connection per request; forecasts and projections are replaced per (game or player, game, model) | Decided |
+| D-21 | 2026-11-16 | predicciones responses are camelCase, requests snake_case; projection `metricas` is a flat object with dotted NFL keys | Decided |
+| D-22 | 2026-11-16 | `POST /modelos/{id}/activar` is an admin override that bypasses the D-18 baseline rule | Decided |
 
 ## 2. Details
+
+### D-20 · Synchronous prediction endpoints
+Generation, precision and training run inside the request and answer 200 with the result. There is no job queue yet: a training run longer than the api timeout returns 503 to the client while predicciones may still finish. Each request opens one psycopg connection (autocommit, `connect_timeout` 5 s) and closes it at the end; a pool is future work. Re-running generation replaces the rows of the same game (or player and game) and model in one transaction, because `pronostico_partido` and `proyeccion_jugador` have no unique key.
+
+### D-21 · Response casing and dotted metric keys
+The Node proxy passes predicciones bodies through, so predicciones answers camelCase like the rest of the public JSON (CONVENTIONS §3). Its request bodies stay snake_case; the api maps them explicitly. Projection `metricas` uses the flat dotted keys of `datos.aplanar_metricas` (`pase.yardas`) rather than nested objects: the same keys the models and the precision comparison use, and no re-nesting code on the way out. The frontend reads NFL projections with `metricas["pase.yardas"]`.
+
+### D-22 · Admin activation bypasses the baseline rule
+`POST /modelos/{id}/activar` sets the model active without the D-18 check (metric better than baseline, no worse than the active model). It exists so an admin can roll back or force a version after reviewing the metrics. The check still happens for automatic activation inside `POST /modelos/reentrenar`.
 
 ### D-02 · Prisma owns the schema
 One migration history, applied by the api initContainer. The ingesta repository's SQL is checked against the real migrated schema by the integration test in CI, so drift fails the build.
@@ -111,6 +124,9 @@ The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test con
 
 ## 3. Known limitations
 
+- Generated forecasts and projections use the games and lines in the database at call time; no scheduled regeneration yet (a scheduled job is future work).
+- `GET /api/pronosticos` newest-per-game uses Prisma `distinct` and counts the total by loading the distinct ids; fine for the course data volume, not for millions of rows.
+
 - `/api/partidos?fecha=` filters a UTC day; a 9 pm Mexico game shows up on the next UTC date.
 - Box-score field names from api-basketball were mapped from documentation and recorded fixtures; confirm against a live response once a key is available.
 - Ingestion writes straight to PostgreSQL, bypassing the api, so catalog cache entries can be stale for up to `CACHE_TTL_S` (60 s) after an ingestion run.
@@ -118,6 +134,7 @@ The proposal says Express. Express 4 + `ts-jest` in CommonJS avoids ESM test con
 - NFL field names are documentation-based (D-15) and `partido.jornada` stays empty because the provider's week labels are not a clean number.
 - Liga MX (D-16): the api-football field mapping, the status codes and the `round` → `jornada` parsing come from the v3 documentation. The fixtures in `services/ingesta/tests/fixtures/ligamx_*.json` are synthetic, shaped like that documentation (player and club names are invented). Confirm the field names, that `passes.accuracy` is a count of accurate passes (stored as a percentage of `passes.total`), the string-typed `games.rating`, and the position values against a live response once a key is available.
 - Liga MX metrics: a provider null on a required metric (`goles`, `asistencias`) is stored as 0, a null on an optional metric is left out of `metricas`. Squad players with null minutes (never on the pitch) are not stored.
+- No rate limiting until SL-31.
 - Fallback duplicates (D-17): the same real game ingested from API-Sports and from a fallback is stored twice, and so are its teams and players. Fallback data should not feed standings until a merge exists.
 - Fallback box scores (D-17): NFL and Liga MX fallback runs store no player stats.
 

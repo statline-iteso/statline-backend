@@ -4,13 +4,16 @@ Tables are owned by Prisma Migrate (services/api/prisma/schema.prisma). Syntheti
 demo seeder are flagged with `es_demo`: their provider ids start with `demo-` (D-16).
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
 import psycopg
+from psycopg.types.json import Jsonb
 
-from predicciones.schemas import Deporte
+from predicciones.errores import SinModeloActivoError
+from predicciones.schemas import Deporte, TipoInferencia
 
 PREFIJO_DEMO = "demo-%"
 LIMITE_PROGRAMADOS_DEFAULT = 500
@@ -145,3 +148,160 @@ def _lineas_vacias() -> pd.DataFrame:
         "es_demo",
     ]
     return pd.DataFrame({columna: pd.Series(dtype=object) for columna in columnas})
+
+
+_SQL_MODELO_ACTIVO = """
+SELECT id::text, version, nombre_metrica, metrica_error FROM modelo_prediccion
+WHERE deporte = %s::deporte AND tipo = %s::tipo_inferencia AND activo
+"""
+
+_SQL_JUGADORES = """
+SELECT j.id::text AS jugador_id, j.equipo_id::text AS equipo_id
+FROM jugador j
+WHERE j.deporte = %s::deporte AND j.equipo_id IS NOT NULL
+ORDER BY j.id
+"""
+
+_SQL_BORRAR_PRONOSTICO = (
+    "DELETE FROM pronostico_partido WHERE partido_id = %s::uuid AND modelo_id = %s::uuid"
+)
+_SQL_INSERTAR_PRONOSTICO = """
+INSERT INTO pronostico_partido (id, partido_id, modelo_id, prob_local, prob_empate, prob_visita,
+    marcador_esperado_local, marcador_esperado_visita, generado_en)
+VALUES (%s::uuid, %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s)
+"""
+
+_SQL_BORRAR_PROYECCION = (
+    "DELETE FROM proyeccion_jugador WHERE jugador_id = %s::uuid AND partido_id = %s::uuid"
+    " AND modelo_id = %s::uuid"
+)
+_SQL_INSERTAR_PROYECCION = """
+INSERT INTO proyeccion_jugador (id, jugador_id, partido_id, modelo_id, metricas, generado_en)
+VALUES (%s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, %s)
+"""
+
+_SQL_PRONOSTICOS_RESUELTOS = """
+SELECT pp.prob_local, pp.prob_empate, pp.prob_visita, p.marcador_local, p.marcador_visita
+FROM pronostico_partido pp
+JOIN partido p ON p.id = pp.partido_id
+WHERE pp.modelo_id = %s::uuid AND p.estatus = 'FINALIZADO' AND pp.generado_en < p.fecha
+  AND p.marcador_local IS NOT NULL AND p.marcador_visita IS NOT NULL
+"""
+
+_SQL_PROYECCIONES_RESUELTAS = """
+SELECT pj.metricas AS proyeccion, e.metricas AS estadistica
+FROM proyeccion_jugador pj
+JOIN partido p ON p.id = pj.partido_id
+JOIN estadistica_jugador_partido e
+  ON e.partido_id = pj.partido_id AND e.jugador_id = pj.jugador_id
+WHERE pj.modelo_id = %s::uuid AND p.estatus = 'FINALIZADO' AND pj.generado_en < p.fecha
+"""
+
+
+def _filas_dict(cur: psycopg.Cursor[Any]) -> list[dict[str, Any]]:
+    columnas = _columnas(cur)
+    return [dict(zip(columnas, fila, strict=True)) for fila in cur.fetchall()]
+
+
+def cargar_info_modelo_activo(
+    conn: psycopg.Connection[Any], deporte: Deporte, tipo: TipoInferencia
+) -> dict[str, Any]:
+    """Id, version, metric name and value of the active model. Does not load the artifact."""
+    with conn.cursor() as cur:
+        cur.execute(_SQL_MODELO_ACTIVO, (deporte.value, tipo.value))
+        fila = cur.fetchone()
+    if fila is None:
+        raise SinModeloActivoError(f"no hay modelo activo para {deporte.value}/{tipo.value}")
+    return {
+        "id": str(fila[0]),
+        "version": str(fila[1]),
+        "nombre_metrica": str(fila[2]),
+        "metrica_error": float(fila[3]),
+    }
+
+
+def cargar_jugadores(conn: psycopg.Connection[Any], deporte: Deporte) -> pd.DataFrame:
+    """Players of a sport with a current team: jugador_id, equipo_id."""
+    with conn.cursor() as cur:
+        cur.execute(_SQL_JUGADORES, (deporte.value,))
+        filas = cur.fetchall()
+        columnas = _columnas(cur)
+    return pd.DataFrame(filas, columns=pd.Index(columnas))
+
+
+def reemplazar_pronosticos(
+    conn: psycopg.Connection[Any],
+    modelo_id: str,
+    filas: Sequence[Mapping[str, Any]],
+) -> None:
+    """Replace the forecasts of these games for this model (no unique key in the table)."""
+    if not filas:
+        return
+    ahora = datetime.now(UTC)
+    with conn.transaction(), conn.cursor() as cur:
+        cur.executemany(_SQL_BORRAR_PRONOSTICO, [(f["partido_id"], modelo_id) for f in filas])
+        cur.executemany(
+            _SQL_INSERTAR_PRONOSTICO,
+            [
+                (
+                    f["id"],
+                    f["partido_id"],
+                    modelo_id,
+                    f["prob_local"],
+                    f["prob_empate"],
+                    f["prob_visita"],
+                    f["marcador_esperado_local"],
+                    f["marcador_esperado_visita"],
+                    ahora,
+                )
+                for f in filas
+            ],
+        )
+
+
+def reemplazar_proyecciones(
+    conn: psycopg.Connection[Any],
+    modelo_id: str,
+    filas: Sequence[Mapping[str, Any]],
+) -> None:
+    """Replace the projections of these (player, game) pairs for this model."""
+    if not filas:
+        return
+    ahora = datetime.now(UTC)
+    with conn.transaction(), conn.cursor() as cur:
+        cur.executemany(
+            _SQL_BORRAR_PROYECCION,
+            [(f["jugador_id"], f["partido_id"], modelo_id) for f in filas],
+        )
+        cur.executemany(
+            _SQL_INSERTAR_PROYECCION,
+            [
+                (
+                    f["id"],
+                    f["jugador_id"],
+                    f["partido_id"],
+                    modelo_id,
+                    Jsonb(f["metricas"]),
+                    ahora,
+                )
+                for f in filas
+            ],
+        )
+
+
+def cargar_pronosticos_resueltos(
+    conn: psycopg.Connection[Any], modelo_id: str
+) -> list[dict[str, Any]]:
+    """Forecasts of one model for finished games with a score."""
+    with conn.cursor() as cur:
+        cur.execute(_SQL_PRONOSTICOS_RESUELTOS, (modelo_id,))
+        return _filas_dict(cur)
+
+
+def cargar_proyecciones_resueltas(
+    conn: psycopg.Connection[Any], modelo_id: str
+) -> list[dict[str, Any]]:
+    """Projections of one model for finished games, with the actual stat line (`estadistica`)."""
+    with conn.cursor() as cur:
+        cur.execute(_SQL_PROYECCIONES_RESUELTAS, (modelo_id,))
+        return _filas_dict(cur)

@@ -8,7 +8,7 @@ import json
 import os
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import psycopg
@@ -72,11 +72,12 @@ def _sembrar(conn: psycopg.Connection[object], deporte: Deporte, partidos: int) 
             ),
         )
     objetivos = [c for c in datos_l.columns if c not in _NO_METRICAS]
+    equipo_de = datos_l.drop_duplicates("jugador_id").set_index("jugador_id")["equipo_id"]
     for jugador in set(datos_l["jugador_id"]):
         conn.execute(
-            "INSERT INTO jugador (id, deporte, nombre, proveedor_id) VALUES (%s, %s::deporte,"
-            " %s, %s)",
-            (_id(jugador), deporte.value, jugador, jugador),
+            "INSERT INTO jugador (id, deporte, nombre, proveedor_id, equipo_id)"
+            " VALUES (%s, %s::deporte, %s, %s, %s)",
+            (_id(jugador), deporte.value, jugador, jugador, _id(equipo_de[jugador])),
         )
     for fila in datos_l.to_dict("records"):
         metricas = _anidar({o: int(fila[o]) for o in objetivos if fila[o] == fila[o]})
@@ -154,3 +155,147 @@ def test_nfl_guarda_grupos_anidados_y_se_aplanan(conn: psycopg.Connection[object
     assert {"pase.yardas", "carrera.yardas", "recepcion.yardas"} <= set(lineas.columns)
     assert lineas["pase.yardas"].notna().any()
     assert lineas["pase.yardas"].isna().any()
+
+
+def _programar(conn: psycopg.Connection[object], n: int) -> list[str]:
+    """Insert n scheduled games between the seeded teams; returns their ids."""
+    equipos = [
+        fila[0]
+        for fila in conn.execute(
+            "SELECT id::text FROM equipo WHERE liga_id = %s ORDER BY nombre", (LIGA_ID,)
+        ).fetchall()
+    ]
+    ids = []
+    for i in range(n):
+        pid = _id(f"programado-{i}")
+        conn.execute(
+            "INSERT INTO partido (id, liga_id, local_id, visita_id, fecha, jornada, temporada,"
+            " estatus, proveedor_id) VALUES (%s, %s, %s, %s, %s, 99, '2025-2026', 'PROGRAMADO',"
+            " %s)",
+            (
+                pid,
+                LIGA_ID,
+                equipos[i % len(equipos)],
+                equipos[(i + 1) % len(equipos)],
+                datetime.now(UTC) + timedelta(days=30 + i),  # future: forecasts precede kickoff
+                f"demo-programado-{i}",
+            ),
+        )
+        ids.append(pid)
+    return ids
+
+
+def test_http_reentrena_genera_y_mide_precision(
+    conn: psycopg.Connection[object], tmp_path: Path
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from predicciones.config import Settings
+    from predicciones.main import create_app, get_conn, get_settings
+
+    _sembrar(conn, Deporte.BASQUETBOL, partidos=160)
+    _programar(conn, 4)
+    app = create_app()
+    app.dependency_overrides[get_conn] = lambda: conn
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        database_url="postgresql://unused", artefactos_dir=str(tmp_path)
+    )
+    cliente = TestClient(app)
+
+    entreno = cliente.post(
+        "/modelos/reentrenar", json={"deporte": "BASQUETBOL", "tipo": "RESULTADO_PARTIDO"}
+    )
+    assert entreno.status_code == 200, entreno.text
+    assert entreno.json()["activado"] is True
+
+    primera = cliente.post("/pronosticos/generar", json={"deporte": "BASQUETBOL", "jornada": 99})
+    assert primera.status_code == 200, primera.text
+    assert primera.json()["generados"] == 4
+    segunda = cliente.post("/pronosticos/generar", json={"deporte": "BASQUETBOL", "jornada": 99})
+    assert segunda.json()["generados"] == 4
+    filas = conn.execute(
+        "SELECT count(*) FROM pronostico_partido WHERE modelo_id = %s::uuid",
+        (primera.json()["modeloId"],),
+    ).fetchone()
+    assert filas is not None and filas[0] == 4  # re-running replaces, it does not duplicate
+
+    # Finish the scheduled games (home team wins) and measure the stored forecasts.
+    conn.execute(
+        "UPDATE partido SET estatus = 'FINALIZADO', marcador_local = 100, marcador_visita = 90"
+        " WHERE jornada = 99"
+    )
+    precision = cliente.get(
+        "/precision", params={"deporte": "BASQUETBOL", "tipo": "RESULTADO_PARTIDO"}
+    )
+    assert precision.status_code == 200, precision.text
+    cuerpo = precision.json()
+    assert cuerpo["precision"]["n"] == 4
+    assert 0.0 <= cuerpo["precision"]["accuracy"] <= 1.0
+    assert cuerpo["precision"]["logLoss"] is not None
+    assert cuerpo["modelo"]["version"].endswith("-synthetic")
+
+    # A forecast stamped after its game started is leakage and must not count.
+    conn.execute(
+        "UPDATE pronostico_partido SET generado_en = (SELECT fecha FROM partido p"
+        " WHERE p.id = partido_id) + interval '1 hour'"
+    )
+    tarde = cliente.get("/precision", params={"deporte": "BASQUETBOL", "tipo": "RESULTADO_PARTIDO"})
+    assert tarde.json()["precision"]["n"] == 0
+
+
+def test_http_proyecciones_y_precision_de_jugadores(
+    conn: psycopg.Connection[object], tmp_path: Path
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from predicciones.config import Settings
+    from predicciones.main import create_app, get_conn, get_settings
+
+    _sembrar(conn, Deporte.BASQUETBOL, partidos=160)
+    _programar(conn, 2)
+    app = create_app()
+    app.dependency_overrides[get_conn] = lambda: conn
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        database_url="postgresql://unused", artefactos_dir=str(tmp_path)
+    )
+    cliente = TestClient(app)
+
+    entreno = cliente.post(
+        "/modelos/reentrenar", json={"deporte": "BASQUETBOL", "tipo": "PROYECCION_JUGADOR"}
+    )
+    assert entreno.status_code == 200, entreno.text
+    generado = cliente.post("/proyecciones/generar", json={"deporte": "BASQUETBOL", "jornada": 99})
+    assert generado.status_code == 200, generado.text
+    proyecciones = generado.json()["proyecciones"]
+    assert proyecciones
+
+    # Store an actual stat line for each projected player in his game, then measure.
+    for proy in proyecciones:
+        equipo = conn.execute(
+            "SELECT equipo_id FROM jugador WHERE id = %s", (proy["jugadorId"],)
+        ).fetchone()
+        assert equipo is not None
+        conn.execute(
+            "UPDATE partido SET estatus = 'FINALIZADO', marcador_local = 100,"
+            " marcador_visita = 90 WHERE id = %s AND estatus <> 'FINALIZADO'",
+            (proy["partidoId"],),
+        )
+        conn.execute(
+            "INSERT INTO estadistica_jugador_partido (id, partido_id, jugador_id, equipo_id,"
+            " deporte, minutos, metricas) VALUES (%s, %s, %s, %s, 'BASQUETBOL', 30, %s::jsonb)",
+            (
+                str(uuid.uuid4()),
+                proy["partidoId"],
+                proy["jugadorId"],
+                equipo[0],
+                json.dumps({"puntos": 12, "rebotes": 5, "asistencias": 3}),
+            ),
+        )
+    precision = cliente.get(
+        "/precision", params={"deporte": "BASQUETBOL", "tipo": "PROYECCION_JUGADOR"}
+    )
+    assert precision.status_code == 200, precision.text
+    cuerpo = precision.json()["precision"]
+    assert cuerpo["n"] == len(proyecciones)
+    assert cuerpo["porObjetivo"]["puntos"]["n"] == len(proyecciones)
+    assert cuerpo["porObjetivo"]["puntos"]["mae"] is not None

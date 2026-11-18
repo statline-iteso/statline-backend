@@ -36,6 +36,7 @@ class BundleResultado:
     goles_visita: Any
     features: tuple[str, ...]
     clases: tuple[str, ...]
+    ventana: int = VENTANA_DEFAULT  # games of history per team: inference must use the same
 
 
 def _pipeline_clase() -> Pipeline:
@@ -111,6 +112,7 @@ def entrenar_resultado(
         goles_visita=goles_visita,
         features=tuple(x_todas.columns),
         clases=tuple(etiquetas),
+        ventana=ventana,
     )
     return ResultadoEntrenamiento(
         deporte=deporte,

@@ -19,6 +19,8 @@ import { listasRouter } from "./routes/listas";
 import { alertasRouter } from "./routes/alertas";
 import { ingestasRouter } from "./routes/ingestas";
 import { crearLanzadorDeshabilitado, type LanzadorIngesta } from "./lib/ingesta-lanzador";
+import { modelosRouter, pronosticosRouter, proyeccionesRouter } from "./routes/predicciones";
+import type { PrediccionesClient } from "./lib/predicciones";
 
 export interface AppDeps {
   prisma: PrismaClient;
@@ -37,6 +39,7 @@ export interface AppDeps {
   schemasDir?: string;
   /** Manual ingestion launcher; defaults to the disabled one (503). */
   lanzador?: LanzadorIngesta;
+  predicciones: PrediccionesClient;
 }
 
 /** Composition root for HTTP. server.ts wires real dependencies; tests pass fakes. */
@@ -102,7 +105,6 @@ export function createApp(deps: AppDeps): Express {
     estadisticasRouter({ prisma: deps.prisma, adminOnly, metricas: deps.metricas }),
   );
   app.use("/api/listas", auth, listasRouter({ prisma: deps.prisma }));
-  // TODO(SL-29): /api/pronosticos, /api/proyecciones, /api/modelos (docs/ARCHITECTURE.md §3.2).
   app.use("/api/alertas", auth, alertasRouter({ prisma: deps.prisma }));
   app.use(
     "/api/ingestas",
@@ -114,6 +116,10 @@ export function createApp(deps: AppDeps): Express {
       lanzador: deps.lanzador ?? crearLanzadorDeshabilitado(),
     }),
   );
+  const predicciones = { prisma: deps.prisma, predicciones: deps.predicciones };
+  app.use("/api/pronosticos", auth, pronosticosRouter(predicciones));
+  app.use("/api/proyecciones", auth, proyeccionesRouter(predicciones));
+  app.use("/api/modelos", auth, modelosRouter(predicciones));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
