@@ -1,0 +1,273 @@
+{
+  "get": "games/statistics/players",
+  "parameters": {
+    "id": "1001"
+  },
+  "errors": [],
+  "results": 2,
+  "response": [
+    {
+      "team": {
+        "id": 10,
+        "name": "Kansas City Chiefs"
+      },
+      "groups": [
+        {
+          "name": "Passing",
+          "players": [
+            {
+              "player": {
+                "id": 3001,
+                "name": "Q. Passer",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "comp att",
+                  "value": "24/35"
+                },
+                {
+                  "name": "yards",
+                  "value": "298"
+                },
+                {
+                  "name": "touchdowns",
+                  "value": "2"
+                },
+                {
+                  "name": "interceptions",
+                  "value": "1"
+                },
+                {
+                  "name": "sacks",
+                  "value": "3"
+                }
+              ]
+            },
+            {
+              "player": {
+                "id": 3007,
+                "name": "N. Blanks",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "comp att",
+                  "value": "-"
+                },
+                {
+                  "name": "yards",
+                  "value": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Rushing",
+          "players": [
+            {
+              "player": {
+                "id": 3001,
+                "name": "Q. Passer",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "carries",
+                  "value": "4"
+                },
+                {
+                  "name": "yards",
+                  "value": "11"
+                },
+                {
+                  "name": "touchdowns",
+                  "value": "0"
+                },
+                {
+                  "name": "fumbles lost",
+                  "value": "0"
+                }
+              ]
+            },
+            {
+              "player": {
+                "id": 3002,
+                "name": "R. Runner",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "carries",
+                  "value": "18"
+                },
+                {
+                  "name": "yards",
+                  "value": "102"
+                },
+                {
+                  "name": "touchdowns",
+                  "value": "1"
+                },
+                {
+                  "name": "fumbles lost",
+                  "value": "1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Receiving",
+          "players": [
+            {
+              "player": {
+                "id": 3002,
+                "name": "R. Runner",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "receptions",
+                  "value": "3"
+                },
+                {
+                  "name": "targets",
+                  "value": "4"
+                },
+                {
+                  "name": "yards",
+                  "value": "27"
+                },
+                {
+                  "name": "touchdowns",
+                  "value": "0"
+                }
+              ]
+            },
+            {
+              "player": {
+                "id": 3007,
+                "name": "N. Blanks",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "receptions",
+                  "value": "2"
+                },
+                {
+                  "name": "targets",
+                  "value": "2"
+                },
+                {
+                  "name": "yards",
+                  "value": "1-"
+                },
+                {
+                  "name": "touchdowns",
+                  "value": ""
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": {
+        "id": 11,
+        "name": "Buffalo Bills"
+      },
+      "groups": [
+        {
+          "name": "Receiving",
+          "players": [
+            {
+              "player": {
+                "id": 3003,
+                "name": "T. Receiver",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "receptions",
+                  "value": "7"
+                },
+                {
+                  "name": "targets",
+                  "value": "10"
+                },
+                {
+                  "name": "yards",
+                  "value": "94"
+                },
+                {
+                  "name": "touchdowns",
+                  "value": "1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Kicking",
+          "players": [
+            {
+              "player": {
+                "id": 3004,
+                "name": "K. Kicker",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "field goals",
+                  "value": "2/3"
+                },
+                {
+                  "name": "extra points",
+                  "value": "4/4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Defensive",
+          "players": [
+            {
+              "player": {
+                "id": 3005,
+                "name": "D. Defender",
+                "image": null
+              },
+              "statistics": [
+                {
+                  "name": "tackles",
+                  "value": "6"
+                },
+                {
+                  "name": "sacks",
+                  "value": "1.5"
+                },
+                {
+                  "name": "interceptions",
+                  "value": "0"
+                },
+                {
+                  "name": "passes defended",
+                  "value": "1"
+                },
+                {
+                  "name": "forced fumbles",
+                  "value": "0"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

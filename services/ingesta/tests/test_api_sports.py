@@ -2,7 +2,12 @@ import httpx
 import pytest
 import respx
 
-from ingesta.adaptadores.api_sports import ApiSportsError, ClienteApiSports, CuotaAgotadaError
+from ingesta.adaptadores.api_sports import (
+    ApiSportsError,
+    ClienteApiSports,
+    CuotaAgotadaError,
+    ProveedorCaidoError,
+)
 
 BASE = "https://v1.basketball.api-sports.io"
 
@@ -39,7 +44,7 @@ def test_reintenta_429_y_5xx() -> None:
 @respx.mock
 def test_falla_tras_agotar_reintentos() -> None:
     respx.get(f"{BASE}/games").mock(return_value=httpx.Response(500))
-    with pytest.raises(ApiSportsError, match="tras reintentos"):
+    with pytest.raises(ProveedorCaidoError, match="tras reintentos"):
         cliente(max_retries=1).get("/games", {})
 
 

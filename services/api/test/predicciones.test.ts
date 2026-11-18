@@ -125,6 +125,19 @@ describe("/api/proyecciones", () => {
     });
   });
 
+  it("filters by ?deporte= through the partido's liga", async () => {
+    const { app, prisma } = buildApp();
+    prisma.proyeccionJugador.findMany.mockResolvedValue([]);
+    prisma.proyeccionJugador.count.mockResolvedValue(0);
+    const res = await request(app)
+      .get("/api/proyecciones?deporte=AMERICANO&jornada=3")
+      .set("Authorization", bearer());
+    expect(res.status).toBe(200);
+    expect(prisma.proyeccionJugador.findMany.mock.calls[0]![0]!.where).toEqual({
+      partido: { liga: { deporte: "AMERICANO" }, jornada: 3 },
+    });
+  });
+
   it("GET /:id is 404 when missing", async () => {
     const { app, prisma } = buildApp();
     prisma.proyeccionJugador.findUnique.mockResolvedValue(null);

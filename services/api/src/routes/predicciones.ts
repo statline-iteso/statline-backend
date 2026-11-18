@@ -142,7 +142,10 @@ export function proyeccionesRouter({ prisma, predicciones }: Deps): Router {
       const { page, pageSize } = PaginationSchema.parse(req.query);
       const f = ProyeccionFilterSchema.parse(req.query);
       const where: Prisma.ProyeccionJugadorWhereInput = {};
-      if (f.jornada) where.partido = { jornada: f.jornada };
+      const enPartido: Prisma.PartidoWhereInput = {};
+      if (f.deporte) enPartido.liga = { deporte: f.deporte };
+      if (f.jornada) enPartido.jornada = f.jornada;
+      if (Object.keys(enPartido).length > 0) where.partido = enPartido;
       if (f.jugadorId) where.jugadorId = f.jugadorId;
       if (f.partidoId) where.partidoId = f.partidoId;
       const [data, total] = await Promise.all([

@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     api_sports_max_retries: int = 3
     # Free plan: ~100 requests per day per sport (proposal §3.3). Stop before the provider does.
     api_sports_daily_quota: int = 95
+    # Fallback providers (SL-20, D-17). balldontlie is a secret (Key Vault `balldontlie-api-key`);
+    # without a key the NBA fallback is disabled. TheSportsDB "3" is its public free test key.
+    fallback_habilitado: bool = True
+    balldontlie_api_key: SecretStr = Field(
+        default=SecretStr(""), description="balldontlie.io key; empty disables the NBA fallback"
+    )
+    thesportsdb_api_key: str = "3"
     temporada_basquetbol: str = "2025-2026"
     temporada_americano: str = "2026"
     temporada_futbol: str = "2026"
