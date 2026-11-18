@@ -41,6 +41,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-33 | 2026-11-16 | Prediction endpoints are synchronous; one autocommit connection per request; forecasts and projections are replaced per (game or player, game, model) | Decided |
 | D-34 | 2026-11-16 | predicciones responses are camelCase, requests snake_case; projection `metricas` is a flat object with dotted NFL keys | Decided |
 | D-35 | 2026-11-16 | `POST /modelos/{id}/activar` is an admin override that bypasses the D-31 baseline rule | Decided |
+| D-36 | 2026-11-17 | Demo data carries a strong team-strength signal and defaults to 240 days, so every model trained on it can beat its baseline | Decided |
 
 ## 2. Details
 
@@ -143,6 +144,9 @@ The Node proxy passes predicciones bodies through, so predicciones answers camel
 
 ### D-35 · Admin activation bypasses the baseline rule
 `POST /modelos/{id}/activar` sets the model active without the D-31 check (metric better than baseline, no worse than the active model). It exists so an admin can roll back or force a version after reviewing the metrics. The check still happens for automatic activation inside `POST /modelos/reentrenar`.
+
+### D-36 · Demo data strong enough to train on
+With the first seeder (team strength gap moving an NBA margin by ~3 points against ~14 of noise, NFL yardage independent of the rival, 60 days) no outcome model beat the home-win baseline, so the forecasts screen stayed empty. The models were left alone (D-32): real data, not the demo, should drive model choices. Instead `demo.py` scales the strength gap per sport (`EFECTO_FUERZA_BASQUETBOL` 22 points, `EFECTO_FUERZA_AMERICANO` 0.9 and `EFECTO_FUERZA_FUTBOL` 1.4 on the log scoring rate), NFL yards per catch and per carry and Liga MX shot volume grow with the gap, and `--dias` defaults to 240 (NFL reaches ~140 games, above the 60-game minimum). Checked with seeds 7, 42 and 2026: all six models activate through the D-31 rule. Score distributions stay plausible (NBA 225 total points, 60 % home wins; Liga MX 3.0 goals, 19 % draws; NFL 46 points). `test_la_fuerza_del_equipo_persiste_entre_mitades_de_temporada` guards the signal. Accuracy on demo data says nothing about accuracy on real games.
 
 
 ## 3. Known limitations

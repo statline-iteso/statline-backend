@@ -36,7 +36,8 @@ PREFIJO = "demo-"
 PROVEEDOR_LIGA = "api-sports"
 LIGA_PROVEEDOR_ID = {Deporte.BASQUETBOL: "12", Deporte.AMERICANO: "1", Deporte.FUTBOL: "262"}
 SEMILLA_DEFAULT = 42
-DIAS_DEFAULT = 60
+# NFL plays ~4 games a week: 60 days gave 34, below predicciones' 60-game training minimum.
+DIAS_DEFAULT = 240
 DIAS_PROGRAMADOS = 7
 
 PORTERO = "Portero"
@@ -55,6 +56,14 @@ _APELLIDOS = (
     "Vega", "Luna", "Fuentes", "Garza", "Mendoza", "Ríos", "Guzmán",
 )  # fmt: skip
 _MINUTOS_DE_INICIO = (0, 15, 30, 45)
+
+# How much the team strength gap (local.fuerza - visita.fuerza, SD ~0.35) moves the result.
+# Tuned so the outcome models trained on demo data beat the home-win baseline (D-36):
+# NBA margin shifts ~1 SD of 7 points, close to real point spreads; NFL and Liga MX scale
+# the expected scoring rate.
+EFECTO_FUERZA_BASQUETBOL = 22.0  # points of margin per unit of fuerza gap
+EFECTO_FUERZA_AMERICANO = 0.9  # log-rate of touchdowns
+EFECTO_FUERZA_FUTBOL = 1.4  # log-rate of goals
 
 
 @dataclass(frozen=True)
@@ -315,7 +324,9 @@ def _simular(
 def _simular_basquetbol(
     rng: random.Random, pid: str, local: _Equipo, visita: _Equipo
 ) -> tuple[int, int, list[EstadisticaNorm]]:
-    margen = 3.0 + 8.0 * (local.fuerza - visita.fuerza)  # ventaja de local incluida
+    margen = 3.0 + EFECTO_FUERZA_BASQUETBOL * (
+        local.fuerza - visita.fuerza
+    )  # ventaja de local incluida
     tl = _entero_acotado(rng, 112 + margen / 2, 10.0, 75, 150)
     tv = _entero_acotado(rng, 112 - margen / 2, 10.0, 75, 150)
     if tl == tv:  # no empates en la NBA
@@ -420,11 +431,13 @@ def _simular_futbol(
     rng: random.Random, pid: str, local: _Equipo, visita: _Equipo
 ) -> tuple[int, int, list[EstadisticaNorm]]:
     dif = local.fuerza - visita.fuerza
-    goles_l = _poisson(rng, 1.35 * math.exp(0.35 * dif + 0.15))
-    goles_v = _poisson(rng, 1.15 * math.exp(-0.35 * dif))  # empates ocurren de forma natural
+    goles_l = _poisson(rng, 1.35 * math.exp(EFECTO_FUERZA_FUTBOL * dif + 0.15))
+    goles_v = _poisson(
+        rng, 1.15 * math.exp(-EFECTO_FUERZA_FUTBOL * dif)
+    )  # empates ocurren de forma natural
     lineas = [
-        *_lineas_futbol(rng, pid, local, goles_l, goles_v),
-        *_lineas_futbol(rng, pid, visita, goles_v, goles_l),
+        *_lineas_futbol(rng, pid, local, goles_l, goles_v, dif),
+        *_lineas_futbol(rng, pid, visita, goles_v, goles_l, -dif),
     ]
     return goles_l, goles_v, lineas
 
@@ -450,7 +463,7 @@ def _alineacion_futbol(
 
 
 def _lineas_futbol(
-    rng: random.Random, pid: str, equipo: _Equipo, goles: int, recibidos: int
+    rng: random.Random, pid: str, equipo: _Equipo, goles: int, recibidos: int, ventaja: float
 ) -> list[EstadisticaNorm]:
     rotacion = _alineacion_futbol(rng, equipo.jugadores)
     anotados, asistidos = _asignar_goles(rng, rotacion, goles)
@@ -458,7 +471,7 @@ def _lineas_futbol(
     for jugador, minutos in rotacion:
         clave = jugador.jugador.proveedor_id
         metricas = _metricas_futbol(
-            rng, jugador, minutos / 90, anotados[clave], asistidos[clave], recibidos
+            rng, jugador, minutos / 90, anotados[clave], asistidos[clave], recibidos, ventaja
         )
         lineas.append(
             EstadisticaNorm(pid, equipo.norm.proveedor_id, jugador.jugador, minutos, metricas)
@@ -492,7 +505,13 @@ def _precision_pases(rng: random.Random, habilidad: float) -> float:
 
 
 def _metricas_futbol(
-    rng: random.Random, jugador: _Jugador, esc: float, goles: int, asist: int, recibidos: int
+    rng: random.Random,
+    jugador: _Jugador,
+    esc: float,
+    goles: int,
+    asist: int,
+    recibidos: int,
+    ventaja: float,
 ) -> dict[str, Any]:
     h = jugador.habilidad
     pos = _posicion(jugador)
@@ -515,7 +534,9 @@ def _metricas_futbol(
         metricas["precisionPases"] = _precision_pases(rng, h)
         return metricas
 
-    tiros_sin_ajustar = _poisson(rng, 1.4 * esc * math.exp(0.3 * h) * _FACTOR_TIRO[pos])
+    tiros_sin_ajustar = _poisson(
+        rng, 1.4 * esc * math.exp(0.3 * h + EFECTO_FUERZA_FUTBOL * ventaja) * _FACTOR_TIRO[pos]
+    )
     tiros_a_gol = max(goles, _binomial(rng, tiros_sin_ajustar, 0.35))
     metricas.update(
         {
@@ -535,6 +556,8 @@ def _metricas_futbol(
 # --- americano (NFL) ---------------------------------------------------------------------------
 
 _PESO_RECEPTOR = {"WR": 3.0, "TE": 1.5, "RB": 1.0}
+# A stronger offense against a weaker defense gains more yards per catch and per carry.
+_YARDAS_POR_VENTAJA = 6.0 * EFECTO_FUERZA_AMERICANO
 _TACLEADAS_POR_POSICION = {"DL": 3.0, "LB": 6.0, "CB": 4.0, "S": 5.0}
 
 
@@ -542,12 +565,12 @@ def _simular_americano(
     rng: random.Random, pid: str, local: _Equipo, visita: _Equipo
 ) -> tuple[int, int, list[EstadisticaNorm]]:
     dif = local.fuerza - visita.fuerza
-    td_l = _poisson(rng, 2.4 * math.exp(0.25 * dif + 0.1))
-    td_v = _poisson(rng, 2.4 * math.exp(-0.25 * dif))
+    td_l = _poisson(rng, 2.4 * math.exp(EFECTO_FUERZA_AMERICANO * dif + 0.1))
+    td_v = _poisson(rng, 2.4 * math.exp(-EFECTO_FUERZA_AMERICANO * dif))
     fg_l, fg_v = _poisson(rng, 1.6), _poisson(rng, 1.6)
     lineas = [
-        *_lineas_americano(rng, pid, local, td_l, fg_l),
-        *_lineas_americano(rng, pid, visita, td_v, fg_v),
+        *_lineas_americano(rng, pid, local, td_l, fg_l, dif),
+        *_lineas_americano(rng, pid, visita, td_v, fg_v, -dif),
     ]
     # Cada TD vale 7 (TD + punto extra convertido) y cada gol de campo 3.
     return 7 * td_l + 3 * fg_l, 7 * td_v + 3 * fg_v, lineas
@@ -562,7 +585,12 @@ def _por_posicion(jugadores: tuple[_Jugador, ...], posicion: str) -> list[_Jugad
 
 
 def _lineas_americano(
-    rng: random.Random, pid: str, equipo: _Equipo, anotaciones: int, goles_campo: int
+    rng: random.Random,
+    pid: str,
+    equipo: _Equipo,
+    anotaciones: int,
+    goles_campo: int,
+    ventaja: float,
 ) -> list[EstadisticaNorm]:
     """Team touchdowns split into passing (QB→receiver) and rushing, so the box score adds up."""
     qb = _por_posicion(equipo.jugadores, "QB")[0]
@@ -590,12 +618,12 @@ def _lineas_americano(
     for receptor in capturas:
         clave = receptor.jugador.proveedor_id
         recepciones[clave] += 1
-        yardas[clave] += max(-3, round(rng.gauss(10.5, 6.0)))
+        yardas[clave] += max(-3, round(rng.gauss(10.5 + _YARDAS_POR_VENTAJA * ventaja, 6.0)))
     for indice in rng.sample(range(completos), td_pase):
         tds_recepcion[capturas[indice].jugador.proveedor_id] += 1
 
     # Acarreos: se reparten entre los RB; los TD de carrera caen en acarreos al azar.
-    acarreos_total = max(12, round(rng.gauss(26, 4)))
+    acarreos_total = max(12, round(rng.gauss(26 + 4 * EFECTO_FUERZA_AMERICANO * ventaja, 4)))
     pesos_acarreo = [math.exp(0.3 * j.habilidad) for j in acarreadores]
     portadores = rng.choices(acarreadores, weights=pesos_acarreo, k=acarreos_total)
     acarreos: dict[str, int] = dict.fromkeys((j.jugador.proveedor_id for j in acarreadores), 0)
@@ -604,7 +632,12 @@ def _lineas_americano(
     for portador in portadores:
         clave = portador.jugador.proveedor_id
         acarreos[clave] += 1
-        yardas_carrera[clave] += max(-2, round(rng.gauss(4.2 + 0.2 * portador.habilidad, 3.0)))
+        yardas_carrera[clave] += max(
+            -2,
+            round(
+                rng.gauss(4.2 + 0.2 * portador.habilidad + 0.3 * _YARDAS_POR_VENTAJA * ventaja, 3.0)
+            ),
+        )
     for indice in rng.sample(range(acarreos_total), td_carrera):
         td_acarreo[portadores[indice].jugador.proveedor_id] += 1
 

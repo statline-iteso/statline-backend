@@ -2,7 +2,7 @@
 
     ingesta run basquetbol [--desde YYYY-MM-DD] [--hasta YYYY-MM-DD]   # what each CronJob runs
     ingesta serve                                                       # /healthz /readyz /metrics
-    ingesta seed-demo --confirmar [--deportes ...] [--semilla 42] [--dias 60]   # dev only
+    ingesta seed-demo --confirmar [--deportes ...] [--semilla 42] [--dias 240]   # dev only
 
 `run` defaults to yesterday and today (UTC), so a daily schedule catches late finals.
 `seed-demo` writes synthetic data (provider `demo`); no CronJob runs it.
