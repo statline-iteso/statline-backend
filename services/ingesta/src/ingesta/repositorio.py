@@ -24,6 +24,7 @@ class Repositorio(Protocol):
         exitosa: bool,
         registros: int,
         peticiones: int,
+        proveedor: str | None = None,
         error: str | None,
     ) -> None: ...
     def guardar_partido(self, liga_id: str, partido: PartidoNorm) -> str: ...
@@ -70,16 +71,19 @@ class RepositorioPostgres:
         exitosa: bool,
         registros: int,
         peticiones: int,
+        proveedor: str | None = None,
         error: str | None,
     ) -> None:
         self._conn.execute(
             "UPDATE ejecucion_ingesta SET estatus = %s::estatus_ingesta, finalizada_en = %s,"
-            " registros_procesados = %s, peticiones_usadas = %s, error = %s WHERE id = %s",
+            " registros_procesados = %s, peticiones_usadas = %s,"
+            " proveedor = COALESCE(%s, proveedor), error = %s WHERE id = %s",
             (
                 "EXITOSA" if exitosa else "FALLIDA",
                 datetime.now(UTC),
                 registros,
                 peticiones,
+                proveedor,
                 error,
                 ejecucion_id,
             ),

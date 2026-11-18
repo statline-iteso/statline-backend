@@ -25,6 +25,14 @@ class ApiSportsError(RuntimeError):
     pass
 
 
+class ProveedorCaidoError(ApiSportsError):
+    """The provider stayed unavailable (5xx, 429 or network) after all retries.
+
+    Unlike a 4xx (a bad key or parameter, which is a bug to fix), this one is transient and is the
+    signal to switch to the fallback provider (SL-20).
+    """
+
+
 class ClienteApiSports:
     def __init__(
         self,
@@ -57,7 +65,7 @@ class ClienteApiSports:
                 resp = self._http.get(path, params=params)
             except httpx.TransportError as err:
                 if intento == self._max_retries:
-                    raise ApiSportsError(f"{path}: {err}") from err
+                    raise ProveedorCaidoError(f"{path}: {err}") from err
             else:
                 if resp.status_code == 200:
                     body = resp.json()
@@ -68,7 +76,7 @@ class ClienteApiSports:
                 if resp.status_code != 429 and resp.status_code < 500:
                     raise ApiSportsError(f"{path}: HTTP {resp.status_code}")
                 if intento == self._max_retries:
-                    raise ApiSportsError(f"{path}: HTTP {resp.status_code} tras reintentos")
+                    raise ProveedorCaidoError(f"{path}: HTTP {resp.status_code} tras reintentos")
             time.sleep(self._backoff_s * 2**intento)
         raise AssertionError("unreachable")  # pragma: no cover
 
