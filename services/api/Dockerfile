@@ -25,13 +25,12 @@ FROM node:20-alpine AS runtime
 # Patched OS packages; npm, npx and corepack are not needed at runtime and bundle their own
 # (often vulnerable) dependencies, so they are removed from the final image.
 RUN apk upgrade --no-cache && apk add --no-cache openssl  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
-ENV NODE_ENV=production PORT=3000
+ENV NODE_ENV=production PORT=3000 SCHEMAS_DIR=/app/schemas
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 COPY --from=build --chown=node:node /repo/services/api/dist ./dist
-# JSON Schemas for metricas validation (D-06); SCHEMAS_DIR points here.
+# Metric JSON Schemas (SCHEMAS_DIR): metricas validation (D-06) and player aggregates.
 COPY --chown=node:node schemas ./schemas
-ENV SCHEMAS_DIR=/app/schemas
 USER node
 EXPOSE 3000
 # Migrations run in the Deployment's initContainer (`npx prisma migrate deploy`), not here.

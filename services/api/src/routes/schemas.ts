@@ -91,6 +91,32 @@ export const PartidoFilterSchema = z.object({
   jornada: z.coerce.number().int().positive().optional(),
 });
 
+// ── Jugador · agregados (SL-27) ──────────────────────────────────────────
+export const PromediosQuerySchema = z.object({
+  ultimos: z.coerce.number().int().min(1).max(500).optional(),
+});
+export const TendenciaQuerySchema = z.object({
+  metrica: z.string().min(1).max(100),
+  n: z.coerce.number().int().min(1).max(100).default(10),
+});
+export const CompararQuerySchema = z.object({
+  ids: z
+    .string()
+    .transform((s) =>
+      s
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    )
+    .pipe(
+      z
+        .array(z.string().uuid())
+        .min(2)
+        .max(4)
+        .refine((ids) => new Set(ids).size === ids.length, "Los ids no pueden repetirse"),
+    ),
+});
+
 // ── EstadisticaJugadorPartido ────────────────────────────────────────────
 // The sport is not an input: it is taken from the partido's liga, so a client can't send
 // metrics for one sport tagged as another.
