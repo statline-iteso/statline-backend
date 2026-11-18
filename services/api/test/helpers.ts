@@ -4,7 +4,9 @@ import pino from "pino";
 import type Redis from "ioredis";
 import RedisMock from "ioredis-mock";
 import { createApp, type AppDeps } from "../src/app";
+import { defaultSchemasDir } from "../src/config";
 import { createTokenService, type Rol } from "../src/lib/auth";
+import { createMetricasValidator } from "../src/lib/metricas";
 import { createMetrics } from "../src/lib/metrics";
 import type { RedisHandle } from "../src/lib/redis";
 
@@ -22,6 +24,7 @@ export function buildApp(overrides: Partial<AppDeps> = {}) {
     prisma: prisma as unknown as PrismaClient,
     tokens,
     metrics,
+    metricas: createMetricasValidator(defaultSchemasDir),
     logger: pino({ level: "silent" }),
     ...overrides,
   });

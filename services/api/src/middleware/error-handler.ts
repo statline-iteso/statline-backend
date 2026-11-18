@@ -24,6 +24,12 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     });
     return;
   }
+  if (typeof err === "object" && err !== null && "type" in err && err.type === "entity.too.large") {
+    res
+      .status(413)
+      .json({ error: { code: "PAYLOAD_TOO_LARGE", message: "Cuerpo demasiado grande" } });
+    return;
+  }
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2025") {
       res.status(404).json({ error: { code: "NOT_FOUND", message: "Recurso no encontrado" } });
@@ -31,6 +37,12 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     }
     if (err.code === "P2002") {
       res.status(409).json({ error: { code: "DUPLICATE", message: "El recurso ya existe" } });
+      return;
+    }
+    if (err.code === "P2003") {
+      res.status(400).json({
+        error: { code: "INVALID_REFERENCE", message: "Referencia a un recurso inexistente" },
+      });
       return;
     }
   }
