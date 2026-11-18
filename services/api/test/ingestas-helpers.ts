@@ -3,6 +3,8 @@ import { mockDeep, type DeepMockProxy } from "jest-mock-extended";
 import pino from "pino";
 import { createApp } from "../src/app";
 import type { LanzadorIngesta } from "../src/lib/ingesta-lanzador";
+import { defaultSchemasDir } from "../src/config";
+import { createMetricasValidator } from "../src/lib/metricas";
 import { createMetrics } from "../src/lib/metrics";
 import { tokens } from "./helpers";
 
@@ -14,6 +16,7 @@ export function buildAppWithLanzador(lanzador: LanzadorIngesta) {
     tokens,
     metrics: createMetrics(),
     logger: pino({ level: "silent" }),
+    metricas: createMetricasValidator(defaultSchemasDir),
     lanzador,
   });
   return { app, prisma };

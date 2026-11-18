@@ -91,6 +91,58 @@ export const PartidoFilterSchema = z.object({
   jornada: z.coerce.number().int().positive().optional(),
 });
 
+// ── Jugador · agregados (SL-27) ──────────────────────────────────────────
+export const PromediosQuerySchema = z.object({
+  ultimos: z.coerce.number().int().min(1).max(500).optional(),
+});
+export const TendenciaQuerySchema = z.object({
+  metrica: z.string().min(1).max(100),
+  n: z.coerce.number().int().min(1).max(100).default(10),
+});
+export const CompararQuerySchema = z.object({
+  ids: z
+    .string()
+    .transform((s) =>
+      s
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    )
+    .pipe(
+      z
+        .array(z.string().uuid())
+        .min(2)
+        .max(4)
+        .refine((ids) => new Set(ids).size === ids.length, "Los ids no pueden repetirse"),
+    ),
+});
+
+// ── EstadisticaJugadorPartido ────────────────────────────────────────────
+// The sport is not an input: it is taken from the partido's liga, so a client can't send
+// metrics for one sport tagged as another.
+export const CreateEstadisticaSchema = z.object({
+  partidoId: z.string().uuid(),
+  jugadorId: z.string().uuid(),
+  equipoId: z.string().uuid(),
+  minutos: z.number().int().min(0).nullish(),
+  metricas: z.record(z.string(), z.unknown()),
+});
+export const UpdateEstadisticaSchema = CreateEstadisticaSchema.partial();
+export const EstadisticaFilterSchema = z.object({
+  jugadorId: z.string().uuid().optional(),
+  partidoId: z.string().uuid().optional(),
+});
+/** Upper bound for POST /api/estadisticas/lote (one transaction). */
+export const MAX_LOTE = 500;
+export const LoteSchema = z.array(z.unknown()).min(1).max(MAX_LOTE);
+
+// ── ListaSeguimiento ─────────────────────────────────────────────────────
+export const CreateListaSchema = z.object({ nombre: z.string().min(1).max(120) });
+export const UpdateListaSchema = CreateListaSchema.partial();
+export const ElementoListaSchema = z.object({
+  tipo: z.enum(["JUGADOR", "EQUIPO"]),
+  refId: z.string().uuid(),
+});
 // ── Alerta ───────────────────────────────────────────────────────────────
 export const OperadorSchema = z.enum([">", ">=", "<", "<=", "="]);
 export const CondicionSchema = z.object({
