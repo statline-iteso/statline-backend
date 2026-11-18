@@ -36,6 +36,9 @@ Full description in infra [`docs/modelo-datos.md`](https://github.com/statline-i
 - `src/lib/crud.ts` — `createCrudRouter()`: the five standard operations, pagination, validation, `writeGuard`. Each resource router registers its extra routes **before** mounting it so they win over `/:id`.
 - `src/lib/standings.ts` — pure standings and form logic.
 - `src/routes/` — `health`, `usuarios` (auth + users), `catalogo` (ligas, equipos, jugadores, partidos), `schemas` (zod).
+- `src/lib/redis.ts` — `createRedis()`: the ioredis client, created only when `REDIS_URL` is set (§3.5).
+- `src/lib/cache.ts` — `createCatalogCache()`: read cache and write invalidation for the catalog (§3.5).
+- `src/lib/rate-limit.ts` — `createRateLimiters()`: global `/api` and login limiters with Redis and memory fallback (§3.5).
 
 ### 3.2 Routes
 
@@ -43,7 +46,7 @@ The full table with examples is in infra [`docs/api.md`](https://github.com/stat
 
 | Route | Notes |
 |---|---|
-| `GET /healthz`, `GET /readyz`, `GET /metrics` | readyz runs `SELECT 1` |
+| `GET /healthz`, `GET /readyz`, `GET /metrics` | readyz runs `SELECT 1`; with `REDIS_URL` also a PING (503 if either fails; body `checks` names the failing one). Probes and `/metrics` are never rate limited |
 | `POST /api/auth/login`, `POST /api/auth/refresh` | access 15 min, refresh 7 days; refresh re-reads the role |
 | `/api/usuarios` CRUD | sign-up public (always USUARIO); self-or-admin; only ADMIN changes roles |
 | `/api/ligas` CRUD `?deporte=` · `/:id/posiciones` · `/:id/calendario` | |
@@ -51,7 +54,7 @@ The full table with examples is in infra [`docs/api.md`](https://github.com/stat
 | `/api/jugadores` CRUD `?q=&deporte=` | case-insensitive name search |
 | `/api/partidos` CRUD `?fecha=&jornada=` · `/:id/boxscore` | `fecha` is a UTC day |
 
-Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`), SL-31 (Redis).
+Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-28 (`/api/estadisticas`, `/api/listas`), SL-29 (`/api/pronosticos`, `/api/proyecciones`, `/api/modelos`), SL-30 (`/api/alertas`, `/api/ingestas`).
 
 ### 3.3 Errors
 
@@ -60,6 +63,17 @@ Planned: SL-27 (`/api/jugadores/:id/promedios`, `/tendencia`, `/comparar`), SL-2
 ### 3.4 Auth
 
 JWT HS256 with separate secrets for access and refresh tokens. Claims: `sub` (user id), `rol`. Catalog reads need any valid token; catalog writes need ADMIN (data normally comes from ingestion).
+
+### 3.5 Redis: catalog cache and rate limiting (SL-31)
+
+Redis 7 is optional. Without `REDIS_URL` the api runs with the cache bypassed and rate limits kept in process memory. Any Redis failure degrades to the same behaviour and never fails a request.
+
+- **Client.** `ioredis` with lazy connect, no offline queue (commands fail fast while disconnected), 2 s connect timeout and capped exponential reconnect (200 ms doubling, max 10 s). Closed on SIGTERM. Readiness PINGs with a 500 ms timeout.
+- **Catalog cache.** Opt-in per route: list and `GET /:id` of ligas, equipos, jugadores and partidos, plus `/api/ligas/:id/posiciones|calendario`, `/api/equipos/:id/forma` and `/api/partidos/:id/boxscore`. Key: `statline:cache:catalogo:v<version>:GET:<originalUrl>`, TTL `CACHE_TTL_S`. Only 200 bodies are stored; responses carry `X-Cache: HIT|MISS`.
+- **Invalidation.** Every successful POST/PUT/DELETE on a catalog route INCRs one catalog-wide version key, so all earlier entries become unreachable at once and expire by TTL. One version instead of per-resource prefixes because standings, form and box scores depend on several resources, and no SCAN is needed. The bump runs before the write response is sent. Writes made directly to PostgreSQL (ingesta) are not seen by the API, so they are visible after at most `CACHE_TTL_S`.
+- **Metric.** `statline_cache_requests_total{result="hit|miss|bypass"}`.
+- **Rate limits.** `express-rate-limit` with `rate-limit-redis`. Fixed window of one minute per client IP: `RATE_LIMIT_PER_MIN` for all `/api` requests, `RATE_LIMIT_LOGIN_PER_MIN` for `POST /api/auth/login`. Keys are `statline:rl:global:*` and `statline:rl:login:*`. 429 body: `{ "error": { "code": "RATE_LIMITED", ... } }` with draft-7 `RateLimit` headers. If a Redis call fails, the hit is counted in a per-replica memory store, so the effective limit is per replica during an outage.
+- **Proxy.** `trust proxy` is `1`: the api sits behind exactly one hop (ingress-nginx), so the client IP is the last `X-Forwarded-For` entry added by ingress. If another proxy is added in front, change this value in `src/app.ts` or the rate limit will count the proxy's IP.
 
 ## 4. ingesta
 
@@ -80,7 +94,7 @@ FastAPI app with `/healthz`, `/readyz`, `/metrics`, and the request contract (`s
 
 ## 7. Configuration
 
-All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`.
+All services read environment variables (see `.env.example`). Secrets: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`. api Redis and limit settings (not secret): `REDIS_URL` (optional; unset = no Redis), `CACHE_TTL_S` (60), `RATE_LIMIT_PER_MIN` (300), `RATE_LIMIT_LOGIN_PER_MIN` (10).
 
 ## 8. Deployment contract for the infra chart
 
@@ -92,7 +106,7 @@ All services read environment variables (see `.env.example`). Secrets: `DATABASE
 | Liveness / readiness | `/healthz` / `/readyz` | `/healthz` / `/readyz` | `/healthz` / `/readyz` (serve) |
 | Metrics | `/metrics` | `/metrics` | `/metrics` (serve) |
 | User | `node` (1000) | 10001 | 10001 |
-| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
+| ConfigMap env | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `CACHE_TTL_S`, `RATE_LIMIT_PER_MIN`, `RATE_LIMIT_LOGIN_PER_MIN`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA` |
 | Secret env | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` | `DATABASE_URL` | `DATABASE_URL`, `API_SPORTS_KEY` |
 | initContainer | same image: `["node_modules/.bin/prisma","migrate","deploy"]` | — | — |
 | Writable paths | none | `/tmp`, `ARTEFACTOS_DIR` (PVC or emptyDir) | `/tmp` |
