@@ -1,0 +1,33 @@
+{
+  "_nota": "Sintético: forma de la documentación de balldontlie v1 (GET /stats). No es una grabación.",
+  "data": [
+    {
+      "id": 700001,
+      "min": "36:12",
+      "pts": 31, "reb": 14, "oreb": 3, "dreb": 11, "ast": 9, "stl": 1, "blk": 0, "turnover": 3, "pf": 2,
+      "fgm": 12, "fga": 20, "fg3m": 1, "fg3a": 4, "ftm": 6, "fta": 7, "plus_minus": 12,
+      "player": {"id": 3001, "first_name": "Nikola", "last_name": "Jokić", "position": "C"},
+      "team": {"id": 8, "abbreviation": "DEN", "full_name": "Denver Nuggets", "name": "Nuggets"},
+      "game": {"id": 90001, "date": "2026-11-14"}
+    },
+    {
+      "id": 700002,
+      "min": "34",
+      "pts": 25.0, "reb": 7, "oreb": null, "dreb": 6, "ast": 8, "stl": 2, "blk": 1, "turnover": 2, "pf": 3,
+      "fgm": 9, "fga": 18, "fg3m": 3, "fg3a": 9, "ftm": 4, "fta": 5, "plus_minus": -6,
+      "player": {"id": 3002, "first_name": "LeBron", "last_name": "James"},
+      "team": {"id": 14, "abbreviation": "LAL", "full_name": "Los Angeles Lakers", "name": "Lakers"},
+      "game": {"id": 90001, "date": "2026-11-14"}
+    },
+    {
+      "id": 700003,
+      "min": null,
+      "pts": null, "reb": null, "oreb": null, "dreb": null, "ast": null, "stl": null, "blk": null, "turnover": null, "pf": null,
+      "fgm": null, "fga": null, "fg3m": null, "fg3a": null, "ftm": null, "fta": null, "plus_minus": null,
+      "player": {"id": 3003, "first_name": "Rui", "last_name": "Hachimura"},
+      "team": {"id": 14, "abbreviation": "LAL", "full_name": "Los Angeles Lakers", "name": "Lakers"},
+      "game": {"id": 90001, "date": "2026-11-14"}
+    }
+  ],
+  "meta": {"next_cursor": null, "per_page": 100}
+}
