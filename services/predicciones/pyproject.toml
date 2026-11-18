@@ -34,6 +34,7 @@ packages = ["src/predicciones"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=predicciones --cov-report=term-missing --cov-fail-under=70"
+markers = ["integration: needs a real PostgreSQL (DATABASE_URL)"]
 
 [tool.ruff]
 line-length = 100
@@ -47,3 +48,7 @@ strict = true
 python_version = "3.12"
 mypy_path = "src"
 packages = ["predicciones"]
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "joblib.*"]
+ignore_missing_imports = true

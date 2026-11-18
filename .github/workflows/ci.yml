@@ -92,6 +92,9 @@ jobs:
       - name: Ingesta repository against the real schema
         working-directory: services/ingesta
         run: uv sync --frozen && uv run pytest -m integration --no-cov
+      - name: Predicciones SQL and registry against the real schema
+        working-directory: services/predicciones
+        run: uv sync --frozen && uv run pytest -m integration --no-cov
 
   images:
     name: image · ${{ matrix.service }}

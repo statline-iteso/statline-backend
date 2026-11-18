@@ -7,8 +7,8 @@ This repository hosts the three backend services and the shared JSON Schemas:
 | Service | Stack | Image | Status |
 |---|---|---|---|
 | [`services/api`](services/api) | Node 20, Express, TypeScript, Prisma, JWT + bcrypt | `statline/api` | Auth, usuarios, ligas, equipos, jugadores, partidos ✅ · remaining routes pending |
-| [`services/ingesta`](services/ingesta) | Python 3.12, httpx, pandas, psycopg, jsonschema | `statline/ingesta` | NBA end to end ✅ · NFL, Liga MX, fallbacks pending |
-| [`services/predicciones`](services/predicciones) | Python 3.12, FastAPI, scikit-learn | `statline/predicciones` | Probes and contract ✅ · models pending |
+| [`services/ingesta`](services/ingesta) | Python 3.12, httpx, pandas, psycopg, jsonschema | `statline/ingesta` | NBA end to end ✅ · NFL adapter ✅ (from docs, unverified live) · Liga MX ✅ (field mapping unverified, D-16) · balldontlie/TheSportsDB fallbacks ✅ (unverified live) |
+| [`services/predicciones`](services/predicciones) | Python 3.12, FastAPI, scikit-learn | `statline/predicciones` | Probes, contract, features, outcome and player models, registry, HTTP handlers (generate, precision, retrain, activate) ✅ |
 | [`schemas/`](schemas) | JSON Schema 2020-12 | — | NBA, NFL, Liga MX ✅ |
 
 ## Related Repositories
@@ -45,6 +45,9 @@ pnpm --filter @statline/api db:seed
 pnpm --filter @statline/api dev                                       # API on :3000
 (cd services/predicciones && uv run uvicorn predicciones.main:app --reload --port 8000)
 (cd services/ingesta && uv run ingesta run basquetbol --desde 2026-11-14)   # needs API_SPORTS_KEY
+
+# 5. Optional, dev only: synthetic demo data (no API key, never run by CronJobs)
+(cd services/ingesta && uv run ingesta seed-demo --confirmar)   # --deportes, --semilla, --dias
 ```
 
 ## Testing and quality
