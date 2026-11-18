@@ -19,6 +19,7 @@ const app = createApp({
   cacheTtlS: config.CACHE_TTL_S,
   rateLimits: { global: config.RATE_LIMIT_PER_MIN, login: config.RATE_LIMIT_LOGIN_PER_MIN },
   metrics: createMetrics(),
+  schemasDir: config.SCHEMAS_DIR,
   tokens: createTokenService({
     accessSecret: config.JWT_SECRET,
     refreshSecret: config.JWT_REFRESH_SECRET,

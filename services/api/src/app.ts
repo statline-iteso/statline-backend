@@ -25,6 +25,8 @@ export interface AppDeps {
   cacheTtlS?: number;
   /** Requests per minute per client IP (RATE_LIMIT_PER_MIN and RATE_LIMIT_LOGIN_PER_MIN). */
   rateLimits?: { global: number; login: number };
+  /** Directory with the metric JSON Schemas (SCHEMAS_DIR); defaults to the repo's schemas/. */
+  schemasDir?: string;
 }
 
 /** Composition root for HTTP. server.ts wires real dependencies; tests pass fakes. */
@@ -82,7 +84,7 @@ export function createApp(deps: AppDeps): Express {
   app.use("/api/usuarios", usuariosRouter({ prisma: deps.prisma, auth }));
   app.use("/api/ligas", auth, ligasRouter(catalogo));
   app.use("/api/equipos", auth, equiposRouter(catalogo));
-  app.use("/api/jugadores", auth, jugadoresRouter(catalogo));
+  app.use("/api/jugadores", auth, jugadoresRouter({ ...catalogo, schemasDir: deps.schemasDir }));
   app.use("/api/partidos", auth, partidosRouter(catalogo));
   // TODO(SL-28..SL-30): /api/estadisticas, /api/listas, /api/pronosticos, /api/proyecciones,
   // /api/modelos, /api/alertas, /api/ingestas (docs/ARCHITECTURE.md §5).
