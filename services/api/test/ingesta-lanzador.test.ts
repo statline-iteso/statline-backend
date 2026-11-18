@@ -44,6 +44,18 @@ function fakeK8s(opts: { cronStatus?: number; jobStatus?: number } = {}) {
 }
 
 describe("crearLanzadorKubernetes", () => {
+  it("prepends the release prefix to the CronJob name", async () => {
+    const { http, calls } = fakeK8s();
+    const lanzador = crearLanzadorKubernetes({ http, namespace: NS, prefijo: "statline-staging-" });
+
+    await lanzador.lanzar("BASQUETBOL");
+
+    expect(calls[0]).toEqual({
+      method: "GET",
+      path: `${base}/cronjobs/statline-staging-ingesta-basquetbol`,
+    });
+  });
+
   it("GETs the CronJob for the sport and POSTs a Job built from its jobTemplate", async () => {
     const { http, calls } = fakeK8s();
     const lanzador = crearLanzadorKubernetes({ http, namespace: NS, ahora: () => 1700000000000 });

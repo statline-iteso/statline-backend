@@ -89,18 +89,21 @@ export function construirJobManual(
 export interface LanzadorKubernetesDeps {
   http: K8sHttp;
   namespace: string;
+  /** Prepended to the CronJob name; the chart sets `<release>-` (INGESTA_CRONJOB_PREFIJO). */
+  prefijo?: string;
   ahora?: () => number;
 }
 
 export function crearLanzadorKubernetes({
   http,
   namespace,
+  prefijo = "",
   ahora = Date.now,
 }: LanzadorKubernetesDeps): LanzadorIngesta {
   const base = `/apis/batch/v1/namespaces/${encodeURIComponent(namespace)}`;
   return {
     async lanzar(deporte) {
-      const cronName = CRONJOB_POR_DEPORTE[deporte];
+      const cronName = `${prefijo}${CRONJOB_POR_DEPORTE[deporte]}`;
       const llamar: K8sHttp = async (req) => {
         try {
           return await http(req);
@@ -132,9 +135,10 @@ export type ModoLanzador = "deshabilitado" | "kubernetes";
 
 export function crearLanzadorIngesta(
   modo: ModoLanzador,
-  opts: Parameters<typeof crearClienteEnCluster>[0] = {},
+  opts: Parameters<typeof crearClienteEnCluster>[0] & { prefijo?: string } = {},
 ): LanzadorIngesta {
   if (modo === "deshabilitado") return crearLanzadorDeshabilitado();
-  const { http, namespace } = crearClienteEnCluster(opts);
-  return crearLanzadorKubernetes({ http, namespace });
+  const { prefijo, ...cliente } = opts;
+  const { http, namespace } = crearClienteEnCluster(cliente);
+  return crearLanzadorKubernetes({ http, namespace, prefijo });
 }

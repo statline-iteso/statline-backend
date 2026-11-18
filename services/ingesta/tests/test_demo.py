@@ -131,3 +131,37 @@ def test_americano_marcador_cuadra_con_touchdowns_y_goles_de_campo() -> None:
 def test_generar_rechaza_dias_no_positivos() -> None:
     with pytest.raises(ValueError):
         generar(Deporte.FUTBOL, semilla=1, dias=0, hoy=HOY, temporada="2026")
+
+
+def _porcentaje_victorias(partidos: list[Any]) -> dict[str, float]:
+    puntos: dict[str, list[float]] = {}
+    for p in partidos:
+        n = p.partido
+        local = 1.0 if n.marcador_local > n.marcador_visita else 0.0
+        if n.marcador_local == n.marcador_visita:
+            local = 0.5
+        puntos.setdefault(n.local.proveedor_id, []).append(local)
+        puntos.setdefault(n.visita.proveedor_id, []).append(1.0 - local)
+    return {equipo: sum(v) / len(v) for equipo, v in puntos.items()}
+
+
+@pytest.mark.parametrize("deporte", list(Deporte))
+def test_la_fuerza_del_equipo_persiste_entre_mitades_de_temporada(deporte: Deporte) -> None:
+    """The strength gap must be a real signal (D-36): first-half win % predicts the second half."""
+    jugados = [
+        p for p in generar(
+            deporte, semilla=42, dias=240, hoy=HOY, temporada=TEMPORADAS[deporte]
+        ).partidos
+        if p.partido.estatus is EstatusPartido.FINALIZADO
+    ]  # fmt: skip
+    mitad = len(jugados) // 2
+    primera = _porcentaje_victorias(jugados[:mitad])
+    segunda = _porcentaje_victorias(jugados[mitad:])
+    equipos = sorted(primera.keys() & segunda.keys())
+    x = [primera[e] for e in equipos]
+    y = [segunda[e] for e in equipos]
+    mx, my = sum(x) / len(x), sum(y) / len(y)
+    cov = sum((a - mx) * (b - my) for a, b in zip(x, y, strict=True))
+    var_x = sum((a - mx) ** 2 for a in x)
+    var_y = sum((b - my) ** 2 for b in y)
+    assert cov / (var_x * var_y) ** 0.5 > 0.5

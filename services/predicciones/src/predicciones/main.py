@@ -3,7 +3,7 @@
 Routes: /healthz, /readyz, /metrics and the prediction endpoints (SL-37, SL-38):
 POST /pronosticos/generar, POST /proyecciones/generar, GET /precision,
 POST /modelos/reentrenar, POST /modelos/{id}/activar. Requests are snake_case, responses are
-camelCase (docs/ARCHITECTURE.md §5). Every request opens its own PostgreSQL connection (D-20).
+camelCase (docs/ARCHITECTURE.md §5). Every request opens its own PostgreSQL connection (D-33).
 """
 
 import time

@@ -1,6 +1,6 @@
-"""Model registry (SL-36): versions in `modelo_prediccion`, bytes in `modelo_artefacto` (D-15).
+"""Model registry (SL-36): versions in `modelo_prediccion`, bytes in `modelo_artefacto` (D-28).
 
-Activation rule (D-18): a candidate is activated only when its metric beats its baseline, and,
+Activation rule (D-31): a candidate is activated only when its metric beats its baseline, and,
 when a model is already active for (deporte, tipo), when it is no worse than that model on the
 same metric. Activation is one transaction that deactivates the other versions of the group.
 
@@ -137,7 +137,7 @@ def activar(conn: psycopg.Connection[Any], modelo_id: str) -> None:
 def decidir_activacion(
     supera_baseline: bool, metrica: float, metrica_activa: float | None
 ) -> tuple[bool, str]:
-    """Activation rule of D-18. Returns (activate, reason)."""
+    """Activation rule of D-31. Returns (activate, reason)."""
     if not supera_baseline:
         return False, "no supera el baseline"
     if metrica_activa is None:
@@ -166,7 +166,7 @@ def entrenar_y_registrar(
     ventana: int = VENTANA_DEFAULT,
     ahora: datetime | None = None,
 ) -> dict[str, Any]:
-    """Train on the database, register the version and activate it when D-18 allows."""
+    """Train on the database, register the version and activate it when D-31 allows."""
     if tipo is TipoInferencia.RESULTADO_PARTIDO:
         partidos = cargar_partidos(conn, deporte)
         resultado = entrenar_resultado(deporte, partidos, ventana=ventana)
