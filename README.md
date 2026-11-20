@@ -36,7 +36,8 @@ pnpm install                                   # api (pnpm workspace)
 cp .env.example .env
 docker compose up -d --wait
 
-# 3. Schema and seed (the three leagues; admin if SEED_ADMIN_PASSWORD is set)
+# 3. Schema and seed (the three leagues; admin if SEED_ADMIN_PASSWORD is set). In the cluster the
+#    api image runs the same seed as `node dist/seed.js` in an initContainer after the migrations.
 pnpm --filter @statline/api prisma:generate
 pnpm --filter @statline/api prisma:migrate
 pnpm --filter @statline/api db:seed

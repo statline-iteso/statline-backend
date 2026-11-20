@@ -42,6 +42,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-34 | 2026-11-16 | predicciones responses are camelCase, requests snake_case; projection `metricas` is a flat object with dotted NFL keys | Decided |
 | D-35 | 2026-11-16 | `POST /modelos/{id}/activar` is an admin override that bypasses the D-31 baseline rule | Decided |
 | D-36 | 2026-11-17 | Demo data carries a strong team-strength signal and defaults to 240 days, so every model trained on it can beat its baseline | Decided |
+| D-37 | 2026-11-19 | The seed ships in the api image (`dist/seed.js`) and runs as a second initContainer after the migrations, so a fresh cluster database gets its leagues and first ADMIN without dev tools | Decided |
 
 ## 2. Details
 
@@ -147,6 +148,9 @@ The Node proxy passes predicciones bodies through, so predicciones answers camel
 
 ### D-36 · Demo data strong enough to train on
 With the first seeder (team strength gap moving an NBA margin by ~3 points against ~14 of noise, NFL yardage independent of the rival, 60 days) no outcome model beat the home-win baseline, so the forecasts screen stayed empty. The models were left alone (D-32): real data, not the demo, should drive model choices. Instead `demo.py` scales the strength gap per sport (`EFECTO_FUERZA_BASQUETBOL` 22 points, `EFECTO_FUERZA_AMERICANO` 0.9 and `EFECTO_FUERZA_FUTBOL` 1.4 on the log scoring rate), NFL yards per catch and per carry and Liga MX shot volume grow with the gap, and `--dias` defaults to 240 (NFL reaches ~140 games, above the 60-game minimum). Checked with seeds 7, 42 and 2026: all six models activate through the D-31 rule. Score distributions stay plausible (NBA 225 total points, 60 % home wins; Liga MX 3.0 goals, 19 % draws; NFL 46 points). `test_la_fuerza_del_equipo_persiste_entre_mitades_de_temporada` guards the signal. Accuracy on demo data says nothing about accuracy on real games.
+
+### D-37 · Seed in the image, run on every api pod start
+In AKS the database is private to the VNet and the production image has no `tsx`, so `pnpm db:seed` cannot run against it, yet `ingesta run` fails with `LigaNoSembradaError` until the three `liga` rows exist, and `/api/ingestas/ejecutar` and `/api/modelos/reentrenar` need an ADMIN. The seed moved from `prisma/seed.ts` to `src/seed.ts`, so `tsc` builds it into `dist/seed.js`, and the chart runs it as a second initContainer after `prisma migrate deploy`. Every write is an upsert with `update: {}`, so it never changes existing rows (a changed admin password in Key Vault does not reset the user). Two pods starting together can race on the same insert; a unique violation (P2002) is retried once. **Alternatives:** a Helm/Argo CD hook Job (one run per sync, but one more ordering rule next to the smoke hook), or a manual Job (a step to forget on every fresh environment).
 
 
 ## 3. Known limitations
