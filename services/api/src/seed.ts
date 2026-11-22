@@ -3,7 +3,7 @@
  *
  * Local: `pnpm db:seed`. In the cluster the api image runs `node dist/seed.js` as an initContainer
  * after `prisma migrate deploy`, so every fresh database gets the leagues the ingesta CronJobs look
- * up. The admin password comes from SEED_ADMIN_PASSWORD (Key Vault `seed-admin-password` in AKS);
+ * up. The admin password comes from SEED_ADMIN_PASSWORD (SSM `/statline/<env>/seed-admin-password` in EKS);
  * never commit it. Every write is an upsert that leaves existing rows alone, so it is safe on every
  * pod start.
  */
