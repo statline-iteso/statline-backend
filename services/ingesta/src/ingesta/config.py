@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Environment configuration. Secrets come from Key Vault through the CSI driver."""
+    """Environment configuration. Secrets come from SSM Parameter Store through External Secrets."""
 
     model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
 
@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     api_sports_max_retries: int = 3
     # Free plan: ~100 requests per day per sport (proposal §3.3). Stop before the provider does.
     api_sports_daily_quota: int = 95
-    # Fallback providers (SL-20, D-26). balldontlie is a secret (Key Vault `balldontlie-api-key`);
+    # Fallback providers (SL-20, D-26). balldontlie is a secret (SSM `/statline/comun/balldontlie-api-key`);
     # without a key the NBA fallback is disabled. TheSportsDB "3" is its public free test key.
     # Off by default: the fallback field mappings are unverified against the live APIs (D-26).
     fallback_habilitado: bool = False

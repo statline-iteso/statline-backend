@@ -1,4 +1,4 @@
-# Local dependencies: PostgreSQL 16 and Redis 7 (same major versions as Azure and the AKS chart).
+# Local dependencies: PostgreSQL 16 and Redis 7 (same major versions as RDS and the EKS chart).
 #   docker compose up -d --wait
 #   pnpm --filter @statline/api prisma:migrate && pnpm --filter @statline/api db:seed
 services:

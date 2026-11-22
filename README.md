@@ -14,7 +14,7 @@ This repository hosts the three backend services and the shared JSON Schemas:
 ## Related Repositories
 
 - [statline-frontend](https://github.com/statline-iteso/statline-frontend): React SPA that consumes this API.
-- [statline-infra](https://github.com/statline-iteso/statline-infra): Terraform (Azure, AKS), GitOps, and the project-wide docs (data model, API design, backlog, pending work).
+- [statline-infra](https://github.com/statline-iteso/statline-infra): Terraform (AWS Learner Lab, EKS), GitOps, and the project-wide docs (data model, API design, backlog, pending work).
 
 ## Documentation
 
