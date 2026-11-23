@@ -1,0 +1,162 @@
+name: CD
+
+# Proposal §4.3, step 2 for the api, predicciones and ingesta images: on develop, main and
+# vX.Y.Z tags, build the images, scan them with Trivy (fail on HIGH/CRITICAL), push to
+# Docker Hub only when the scan passes and ask statline-infra to bump the image tags of the matching environment.
+# develop → staging; main and tags → prod (a main push and a tag on the same commit bump prod
+# twice, to the same image: idempotent). Nothing deploys from here: Argo CD syncs infra.
+
+on:
+  push:
+    branches: [develop, main]
+    tags: ["v*.*.*"]
+  # auto-merge.yml starts CD on develop after each merge (merges made with GITHUB_TOKEN fire no push).
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# Docker Hub namespace of the images: repository variable DOCKERHUB_NAMESPACE (the account that
+# owns the repos), "statline" when unset. A variable, not a secret: secret values are masked in
+# logs and job outputs, which would break the image names.
+env:
+  IMAGE_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'statline' }}
+
+jobs:
+  gate:
+    name: secrets present?
+    runs-on: ubuntu-latest
+    outputs:
+      dockerhub: ${{ steps.check.outputs.dockerhub }}
+      dispatch: ${{ steps.check.outputs.dispatch }}
+    steps:
+      - id: check
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          INFRA_DISPATCH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+        run: |
+          echo "dockerhub=$([ -n "$DOCKERHUB_TOKEN" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "dispatch=$([ -n "$INFRA_DISPATCH_TOKEN" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          [ -n "$DOCKERHUB_TOKEN" ] || echo "::notice::DOCKERHUB_USERNAME / DOCKERHUB_TOKEN not set; nothing is built or pushed."
+          [ -n "$INFRA_DISPATCH_TOKEN" ] || echo "::notice::INFRA_DISPATCH_TOKEN not set; statline-infra is not notified."
+
+  images:
+    name: image · ${{ matrix.service }}
+    needs: gate
+    if: needs.gate.outputs.dockerhub == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, predicciones, ingesta]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image tags (7-char SHA; vX.Y.Z on release tags)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}
+          tags: |
+            type=sha,format=short,prefix=
+            type=ref,event=tag
+
+      - name: Build (linux/amd64, multi-stage, loaded locally; nothing is pushed yet)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Short SHA for the Trivy image reference
+        id: sha
+        env:
+          SHA: ${{ github.sha }}
+        run: echo "short=${SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Trivy on the local image (fail on HIGH/CRITICAL, before any push)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:${{ steps.sha.outputs.short }}
+          version: v0.76.1
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Push (only reached when the scan passed; layers come from the build cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+
+  dispatch:
+    name: tell statline-infra which tags to deploy
+    needs: [gate, images]
+    if: needs.gate.outputs.dispatch == 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Environment and tag for this ref
+        id: plan
+        env:
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$REF" in
+            refs/tags/*) [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+              || { echo "::error::Tag '$REF_NAME' is not strict vX.Y.Z; statline-infra would reject it"; exit 1; } ;;
+          esac
+          case "$REF" in
+            refs/heads/develop) env=staging; tag="${SHORT_SHA::7}" ;;
+            refs/heads/main)    env=prod;    tag="${SHORT_SHA::7}" ;;
+            refs/tags/v*.*.*)   env=prod;    tag="$REF_NAME" ;;
+            *) echo "::error::No environment for $REF"; exit 1 ;;
+          esac
+          echo "env=$env" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: repository_dispatch bump-image
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          ENV_NAME: ${{ steps.plan.outputs.env }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg env "$ENV_NAME" --arg tag "$TAG" \
+            --arg repo "$SOURCE_REPO" --arg sha "$SOURCE_SHA" \
+            '{event_type: "bump-image",
+              client_payload: {
+                env: $env,
+                images: {api: $tag, predicciones: $tag, ingesta: $tag},
+                source_repo: $repo,
+                sha: $sha}}' \
+          | gh api --method POST repos/statline-iteso/statline-infra/dispatches --input -
+          echo "Dispatched bump-image: env=$ENV_NAME tag=$TAG"

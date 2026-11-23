@@ -1,0 +1,23 @@
+{
+  "_nota": "Sintético: forma de la documentación de TheSportsDB v1 (eventsday.php). No es una grabación.",
+  "events": [
+    {
+      "idEvent": "2202001",
+      "idLeague": "4350",
+      "strLeague": "Mexican Liga MX",
+      "strSeason": "2026",
+      "strHomeTeam": "Club America",
+      "strAwayTeam": "Guadalajara",
+      "idHomeTeam": "134001",
+      "idAwayTeam": "134002",
+      "intHomeScore": "2",
+      "intAwayScore": "1",
+      "intRound": "17",
+      "dateEvent": "2026-11-14",
+      "strTime": "03:00:00",
+      "strStatus": "FT",
+      "strHomeTeamBadge": null,
+      "strAwayTeamBadge": null
+    }
+  ]
+}

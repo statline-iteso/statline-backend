@@ -6,15 +6,15 @@ This repository hosts the three backend services and the shared JSON Schemas:
 
 | Service | Stack | Image | Status |
 |---|---|---|---|
-| [`services/api`](services/api) | Node 20, Express, TypeScript, Prisma, JWT + bcrypt | `statline/api` | Auth, usuarios, ligas, equipos, jugadores, partidos ✅ · remaining routes pending |
-| [`services/ingesta`](services/ingesta) | Python 3.12, httpx, pandas, psycopg, jsonschema | `statline/ingesta` | NBA end to end ✅ · NFL, Liga MX, fallbacks pending |
-| [`services/predicciones`](services/predicciones) | Python 3.12, FastAPI, scikit-learn | `statline/predicciones` | Probes and contract ✅ · models pending |
+| [`services/api`](services/api) | Node 20, Express, TypeScript, Prisma, JWT + bcrypt | `statline/api` | Auth, usuarios, catalog, player aggregates and comparison, estadísticas, listas, alertas, ingestas, forecasts proxy, Redis cache and rate limit ✅ |
+| [`services/ingesta`](services/ingesta) | Python 3.12, httpx, pandas, psycopg, jsonschema | `statline/ingesta` | NBA end to end ✅ · NFL adapter ✅ (from docs, unverified live) · Liga MX ✅ (field mapping unverified, D-25) · balldontlie/TheSportsDB fallbacks ✅ (unverified live) |
+| [`services/predicciones`](services/predicciones) | Python 3.12, FastAPI, scikit-learn | `statline/predicciones` | Probes, contract, features, outcome and player models, registry, HTTP handlers (generate, precision, retrain, activate) ✅ |
 | [`schemas/`](schemas) | JSON Schema 2020-12 | — | NBA, NFL, Liga MX ✅ |
 
 ## Related Repositories
 
 - [statline-frontend](https://github.com/statline-iteso/statline-frontend): React SPA that consumes this API.
-- [statline-infra](https://github.com/statline-iteso/statline-infra): Terraform (Azure, AKS), GitOps, and the project-wide docs (data model, API design, backlog, pending work).
+- [statline-infra](https://github.com/statline-iteso/statline-infra): Terraform (AWS Learner Lab, EKS), GitOps, and the project-wide docs (data model, API design, backlog, pending work).
 
 ## Documentation
 
@@ -36,7 +36,8 @@ pnpm install                                   # api (pnpm workspace)
 cp .env.example .env
 docker compose up -d --wait
 
-# 3. Schema and seed (the three leagues; admin if SEED_ADMIN_PASSWORD is set)
+# 3. Schema and seed (the three leagues; admin if SEED_ADMIN_PASSWORD is set). In the cluster the
+#    api image runs the same seed as `node dist/seed.js` in an initContainer after the migrations.
 pnpm --filter @statline/api prisma:generate
 pnpm --filter @statline/api prisma:migrate
 pnpm --filter @statline/api db:seed
@@ -45,6 +46,9 @@ pnpm --filter @statline/api db:seed
 pnpm --filter @statline/api dev                                       # API on :3000
 (cd services/predicciones && uv run uvicorn predicciones.main:app --reload --port 8000)
 (cd services/ingesta && uv run ingesta run basquetbol --desde 2026-11-14)   # needs API_SPORTS_KEY
+
+# 5. Optional, dev only: synthetic demo data (no API key, never run by CronJobs)
+(cd services/ingesta && uv run ingesta seed-demo --confirmar)   # --deportes, --semilla, --dias
 ```
 
 ## Testing and quality
@@ -69,4 +73,9 @@ docker build -f services/ingesta/Dockerfile      -t statline/ingesta:local .
 docker build -f services/predicciones/Dockerfile -t statline/predicciones:local .
 ```
 
-Pushing to Docker Hub is done by `cd.yml` after a merge (pending, SL-53). What the Kubernetes manifests need (ports, probes, env vars, args) is in [docs/ARCHITECTURE.md §8](docs/ARCHITECTURE.md#8-deployment-contract-for-the-infra-chart).
+Pushing to Docker Hub is done by `cd.yml` after a merge to `develop` or `main`, or on a `vX.Y.Z` tag: it builds, scans with Trivy, pushes, and asks statline-infra to bump the tags. Without the `DOCKERHUB_*` and `INFRA_DISPATCH_TOKEN` secrets it finishes without publishing. What the Kubernetes manifests need (ports, probes, env vars, args) is in [docs/ARCHITECTURE.md §8](docs/ARCHITECTURE.md#8-deployment-contract-for-the-infra-chart).
+
+## CI/CD
+
+- `ci.yml` runs on every push and PR. `cd.yml` runs on pushes to `develop` and `main` and on `vX.Y.Z` tags: it pushes `statline/api`, `statline/predicciones` and `statline/ingesta` to Docker Hub (7-char SHA, plus `vX.Y.Z` on tags), scans them with Trivy and asks statline-infra to deploy the new tags (`develop` → staging, `main` and tags → prod).
+- Required repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `INFRA_DISPATCH_TOKEN` (fine-grained PAT with `contents: write` on `statline-iteso/statline-infra`).

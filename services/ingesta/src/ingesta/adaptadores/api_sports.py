@@ -25,6 +25,23 @@ class ApiSportsError(RuntimeError):
     pass
 
 
+class ProveedorCaidoError(ApiSportsError):
+    """The provider stayed unavailable (5xx, 429 or network) after all retries.
+
+    Unlike a 4xx (a bad key or parameter, which is a bug to fix), this one is transient and is the
+    signal to switch to the fallback provider (SL-20).
+    """
+
+
+class PlanSinAccesoError(ApiSportsError):
+    """The key's plan does not cover the request (`{"errors": {"plan": ...}}`).
+
+    The free plan only serves the 2022 to 2024 seasons and dates within about a day of today, so it
+    answers every current-season call this way. Not transient, but not a bug either: like an outage,
+    it is the signal to switch to the fallback provider (D-38).
+    """
+
+
 class ClienteApiSports:
     def __init__(
         self,
@@ -57,18 +74,22 @@ class ClienteApiSports:
                 resp = self._http.get(path, params=params)
             except httpx.TransportError as err:
                 if intento == self._max_retries:
-                    raise ApiSportsError(f"{path}: {err}") from err
+                    raise ProveedorCaidoError(f"{path}: {err}") from err
             else:
                 if resp.status_code == 200:
                     body = resp.json()
-                    # API-Sports answers 200 with a non-empty "errors" for bad keys or params.
-                    if body.get("errors"):
-                        raise ApiSportsError(f"{path}: {body['errors']}")
+                    # API-Sports answers 200 with a non-empty "errors" for bad keys or params,
+                    # and with an "errors.plan" message for requests the key's plan does not cover.
+                    errores = body.get("errors")
+                    if errores:
+                        if isinstance(errores, dict) and "plan" in errores:
+                            raise PlanSinAccesoError(f"{path}: {errores['plan']}")
+                        raise ApiSportsError(f"{path}: {errores}")
                     return list(body.get("response", []))
                 if resp.status_code != 429 and resp.status_code < 500:
                     raise ApiSportsError(f"{path}: HTTP {resp.status_code}")
                 if intento == self._max_retries:
-                    raise ApiSportsError(f"{path}: HTTP {resp.status_code} tras reintentos")
+                    raise ProveedorCaidoError(f"{path}: HTTP {resp.status_code} tras reintentos")
             time.sleep(self._backoff_s * 2**intento)
         raise AssertionError("unreachable")  # pragma: no cover
 

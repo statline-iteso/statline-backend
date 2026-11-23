@@ -8,6 +8,8 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  # auto-merge.yml starts this run on develop after each merge (GITHUB_TOKEN merges fire no push).
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -91,6 +93,9 @@ jobs:
           enable-cache: true
       - name: Ingesta repository against the real schema
         working-directory: services/ingesta
+        run: uv sync --frozen && uv run pytest -m integration --no-cov
+      - name: Predicciones SQL and registry against the real schema
+        working-directory: services/predicciones
         run: uv sync --frozen && uv run pytest -m integration --no-cov
 
   images:
