@@ -1,7 +1,8 @@
 """Primary adapter plus one fallback provider, for the rest of a run (SL-20, D-26).
 
-The first provider failure that means "unavailable" (quota exhausted or retries exhausted on 5xx,
-429 or network) switches the run to the fallback for every later call. The providers actually used
+The first provider failure that means "unavailable" (quota exhausted, retries exhausted on 5xx,
+429 or network, or a request the key's plan does not cover) switches the run to the fallback for
+every later call. The providers actually used
 are kept in `proveedor_efectivo()` ("api-sports+balldontlie") and logged.
 
 Games from the fallback carry namespaced ids, so their box scores are routed back to the fallback.
@@ -13,13 +14,17 @@ import logging
 from datetime import date
 from typing import Any
 
-from ingesta.adaptadores.api_sports import CuotaAgotadaError, ProveedorCaidoError
+from ingesta.adaptadores.api_sports import (
+    CuotaAgotadaError,
+    PlanSinAccesoError,
+    ProveedorCaidoError,
+)
 from ingesta.adaptadores.base import AdaptadorDeporte
 from ingesta.modelos import EstadisticaNorm, PartidoNorm
 
 log = logging.getLogger(__name__)
 
-_CAIDAS = (CuotaAgotadaError, ProveedorCaidoError)
+_CAIDAS = (CuotaAgotadaError, ProveedorCaidoError, PlanSinAccesoError)
 _SOLO_PLANTILLA = "AdaptadorConRespaldo usa partidos_del_dia y lineas_del_partido"
 
 
