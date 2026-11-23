@@ -82,7 +82,7 @@ def _error(status: int, codigo: str, mensaje: str, detalles: Any = None) -> JSON
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="StatLine · predicciones", version="0.1.0")
+    app = FastAPI(title="StatLine · predicciones", version="1.0.0")
 
     @app.middleware("http")
     async def metricas(
