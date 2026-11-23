@@ -33,6 +33,15 @@ class ProveedorCaidoError(ApiSportsError):
     """
 
 
+class PlanSinAccesoError(ApiSportsError):
+    """The key's plan does not cover the request (`{"errors": {"plan": ...}}`).
+
+    The free plan only serves the 2022 to 2024 seasons and dates within about a day of today, so it
+    answers every current-season call this way. Not transient, but not a bug either: like an outage,
+    it is the signal to switch to the fallback provider (D-38).
+    """
+
+
 class ClienteApiSports:
     def __init__(
         self,
@@ -69,9 +78,13 @@ class ClienteApiSports:
             else:
                 if resp.status_code == 200:
                     body = resp.json()
-                    # API-Sports answers 200 with a non-empty "errors" for bad keys or params.
-                    if body.get("errors"):
-                        raise ApiSportsError(f"{path}: {body['errors']}")
+                    # API-Sports answers 200 with a non-empty "errors" for bad keys or params,
+                    # and with an "errors.plan" message for requests the key's plan does not cover.
+                    errores = body.get("errors")
+                    if errores:
+                        if isinstance(errores, dict) and "plan" in errores:
+                            raise PlanSinAccesoError(f"{path}: {errores['plan']}")
+                        raise ApiSportsError(f"{path}: {errores}")
                     return list(body.get("response", []))
                 if resp.status_code != 429 and resp.status_code < 500:
                     raise ApiSportsError(f"{path}: HTTP {resp.status_code}")

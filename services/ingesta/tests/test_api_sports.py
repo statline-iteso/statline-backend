@@ -6,6 +6,7 @@ from ingesta.adaptadores.api_sports import (
     ApiSportsError,
     ClienteApiSports,
     CuotaAgotadaError,
+    PlanSinAccesoError,
     ProveedorCaidoError,
 )
 
@@ -84,3 +85,30 @@ def test_respeta_la_cuota() -> None:
     with pytest.raises(CuotaAgotadaError):
         c.get("/games", {})
     c.close()
+
+
+PLAN_GRATIS = {"plan": "Free plans do not have access to this season, try from 2022 to 2024."}
+
+
+@respx.mock
+def test_error_de_plan_es_plan_sin_acceso_sin_reintentar() -> None:
+    # Real answer of the free plan for a current-season request (HTTP 200 with errors.plan).
+    respx.get(f"{BASE}/games").mock(
+        return_value=httpx.Response(200, json={"errors": PLAN_GRATIS, "response": []})
+    )
+    c = cliente()
+    with pytest.raises(PlanSinAccesoError, match="Free plans do not have access"):
+        c.get("/games", {"season": "2025-2026"})
+    assert c.peticiones == 1
+
+
+@respx.mock
+def test_otros_errores_del_cuerpo_siguen_siendo_api_sports_error() -> None:
+    respx.get(f"{BASE}/games").mock(
+        return_value=httpx.Response(
+            200, json={"errors": {"token": "Error/Missing application key."}}
+        )
+    )
+    with pytest.raises(ApiSportsError, match="token") as err:
+        cliente().get("/games", {})
+    assert not isinstance(err.value, PlanSinAccesoError)

@@ -43,6 +43,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-35 | 2026-11-16 | `POST /modelos/{id}/activar` is an admin override that bypasses the D-31 baseline rule | Decided |
 | D-36 | 2026-11-17 | Demo data carries a strong team-strength signal and defaults to 240 days, so every model trained on it can beat its baseline | Decided |
 | D-37 | 2026-11-19 | The seed ships in the api image (`dist/seed.js`) and runs as a second initContainer after the migrations, so a fresh cluster database gets its leagues and first ADMIN without dev tools | Decided |
+| D-38 | 2026-11-23 | An API-Sports plan error (`errors.plan`, the free plan's season and date limits) is a `PlanSinAccesoError` and switches the run to the fallback, like an outage | Decided |
 
 ## 2. Details
 
@@ -92,7 +93,7 @@ Unknown stat names are ignored and unparsable values count as 0, so a wrong name
 
 
 ### D-26 · Fallback providers and duplicate games (SL-20)
-When API-Sports raises `CuotaAgotadaError` (daily budget) or `ProveedorCaidoError` (5xx, 429 or network error still failing after the retries), `AdaptadorConRespaldo` switches the run to the fallback for every later call. A 4xx (bad key or parameter) does not switch: it fails the run, as before. The run records the providers that fed it in `ejecucion_ingesta.proveedor` (`api-sports+balldontlie`) and logs the switch.
+When API-Sports raises `CuotaAgotadaError` (daily budget) or `ProveedorCaidoError` (5xx, 429 or network error still failing after the retries), `AdaptadorConRespaldo` switches the run to the fallback for every later call. A 4xx (bad key or parameter) does not switch: it fails the run, as before. Since D-38 a plan error does switch. The run records the providers that fed it in `ejecucion_ingesta.proveedor` (`api-sports+balldontlie`) and logs the switch.
 
 Decisions:
 - **Liga stays the primary's.** The seeded `liga` rows are keyed on `api-sports`, so the fallback writes into the API-Sports league row. No seed change.
@@ -152,6 +153,9 @@ With the first seeder (team strength gap moving an NBA margin by ~3 points again
 ### D-37 · Seed in the image, run on every api pod start
 In the cluster the database is private to the network (AKS when this was decided; RDS on EKS since infra D-38) and the production image has no `tsx`, so `pnpm db:seed` cannot run against it, yet `ingesta run` fails with `LigaNoSembradaError` until the three `liga` rows exist, and `/api/ingestas/ejecutar` and `/api/modelos/reentrenar` need an ADMIN. The seed moved from `prisma/seed.ts` to `src/seed.ts`, so `tsc` builds it into `dist/seed.js`, and the chart runs it as a second initContainer after `prisma migrate deploy`. Every write is an upsert with `update: {}`, so it never changes existing rows (a changed admin password in the secret store does not reset the user). Two pods starting together can race on the same insert; a unique violation (P2002) is retried once. **Alternatives:** a Helm/Argo CD hook Job (one run per sync, but one more ordering rule next to the smoke hook), or a manual Job (a step to forget on every fresh environment).
 
+
+### D-38 · Plan errors switch to the fallback
+On staging (2026-11-23) the free API-Sports plan answered every request with HTTP 200 and `{"errors": {"plan": "Free plans do not have access to this season, try from 2022 to 2024."}}` (and, for older dates, `…access to this date, try from <yesterday> to <tomorrow>.`). The current seasons and a past-season backfill are both out of reach, so no real data could be ingested. The client now raises `PlanSinAccesoError` for an `errors.plan` body, without retrying, and `AdaptadorConRespaldo` treats it like `CuotaAgotadaError` and `ProveedorCaidoError`. Other `errors` bodies (bad key, bad parameter) still fail the run: those are bugs to fix. **Effect:** with `FALLBACK_HABILITADO=true`, NBA comes from balldontlie (needs `BALLDONTLIE_API_KEY`) and NFL and Liga MX from TheSportsDB (games and scores only, no box scores). With fallback off, nothing changes: the run fails, now with the plan message. The D-26 duplicate risk is smaller with the free plan, because API-Sports never answers for the same day. **Rejected:** retrying (the answer does not change), and moving the seasons to 2024 (the date limit still blocks every past day).
 
 ## 3. Known limitations
 

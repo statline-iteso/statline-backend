@@ -12,6 +12,7 @@ from ingesta.adaptadores.api_sports import (
     ApiSportsError,
     ClienteApiSports,
     CuotaAgotadaError,
+    PlanSinAccesoError,
     ProveedorCaidoError,
 )
 from ingesta.adaptadores.balldontlie import BASE_URL as BALLDONTLIE
@@ -108,6 +109,15 @@ def test_5xx_persistente_cambia_al_respaldo() -> None:
     assert a.proveedor_efectivo() == "api-sports+thesportsdb"
 
 
+def test_plan_sin_acceso_cambia_al_respaldo() -> None:
+    principal = AdaptadorFalso("api-sports")
+    principal.errores_partidos = [PlanSinAccesoError("/games: Free plans do not have access")]
+    respaldo = AdaptadorFalso("thesportsdb", [_partido("thesportsdb:7")])
+    a = AdaptadorConRespaldo(principal, respaldo)  # type: ignore[arg-type]
+    assert [p.proveedor_id for p in a.partidos_del_dia(date(2026, 11, 22))] == ["thesportsdb:7"]
+    assert a.proveedor_efectivo() == "api-sports+thesportsdb"
+
+
 def test_error_de_4xx_no_cambia_de_proveedor() -> None:
     principal = AdaptadorFalso("api-sports")
     principal.errores_partidos = [ApiSportsError("token inválido")]
@@ -199,6 +209,46 @@ def test_corrida_real_pasa_a_balldontlie_tras_error_persistente_5xx(schemas_dir:
     # Two failed attempts on the primary (1 + 1 retry) before the switch, then the fallback calls.
     assert principal.peticiones_usadas() == 2
     assert repo.final["peticiones"] == 2 + respaldo.peticiones_usadas()
+
+
+@respx.mock
+def test_corrida_real_pasa_a_balldontlie_con_el_plan_gratuito(schemas_dir: str) -> None:
+    respx.get(f"{APISPORTS}/games").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "errors": {
+                    "plan": "Free plans do not have access to this season, try from 2022 to 2024."
+                },
+                "response": [],
+            },
+        )
+    )
+    respx.get(f"{BALLDONTLIE}/games").mock(
+        return_value=httpx.Response(200, json=cargar("balldontlie_games.json"))
+    )
+    respx.get(f"{BALLDONTLIE}/stats").mock(
+        return_value=httpx.Response(200, json=cargar("balldontlie_stats.json"))
+    )
+    principal = AdaptadorBasquetbol(
+        ClienteApiSports("basketball", "clave", backoff_s=0), "2025-2026"
+    )
+    respaldo = AdaptadorBalldontlie(ClienteRespaldo(BALLDONTLIE, backoff_s=0), "2025-2026")
+    repo = RepoFalso()
+
+    resultado = ejecutar(
+        AdaptadorConRespaldo(principal, respaldo),  # type: ignore[arg-type]
+        repo,  # type: ignore[arg-type]
+        desde=date(2026, 11, 22),
+        hasta=date(2026, 11, 22),
+        schemas_dir=schemas_dir,
+    )
+
+    assert resultado.exitosa and resultado.error is None
+    assert [p.proveedor_id for p in repo.partidos] == ["balldontlie:90001", "balldontlie:90002"]
+    assert repo.final["proveedor"] == "api-sports+balldontlie"
+    # One request on the primary (a plan error is not retried), then the fallback.
+    assert principal.peticiones_usadas() == 1
 
 
 def _settings(**kw: Any) -> Settings:
