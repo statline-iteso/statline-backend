@@ -21,7 +21,11 @@ MAX_PAGINAS = 200
 
 
 class RespuestaRespaldoError(RuntimeError):
-    """A fallback answered with a 4xx or a body we cannot read."""
+    """A fallback answered with a 4xx or an unreadable body. `status` is the HTTP code, if any."""
+
+    def __init__(self, mensaje: str, status: int | None = None) -> None:
+        super().__init__(mensaje)
+        self.status = status
 
 
 class ClienteRespaldo:
@@ -58,7 +62,9 @@ class ClienteRespaldo:
                         raise RespuestaRespaldoError(f"{path}: el cuerpo no es un objeto JSON")
                     return cuerpo
                 if resp.status_code != 429 and resp.status_code < 500:
-                    raise RespuestaRespaldoError(f"{path}: HTTP {resp.status_code}")
+                    raise RespuestaRespaldoError(
+                        f"{path}: HTTP {resp.status_code}", resp.status_code
+                    )
                 if intento == self._max_retries:
                     raise ProveedorCaidoError(f"{path}: HTTP {resp.status_code} tras reintentos")
                 espera = max(espera, _retry_after(resp))

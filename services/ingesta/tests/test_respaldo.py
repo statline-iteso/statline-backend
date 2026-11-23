@@ -55,8 +55,9 @@ def test_error_de_red_persistente_es_proveedor_caido() -> None:
 def test_4xx_no_reintenta_y_no_es_caida() -> None:
     respx.get(f"{BASE}/games").mock(return_value=httpx.Response(401))
     c = cliente()
-    with pytest.raises(RespuestaRespaldoError, match="401"):
+    with pytest.raises(RespuestaRespaldoError, match="401") as err:
         c.get("/games")
+    assert err.value.status == 401
     assert c.peticiones == 1
 
 

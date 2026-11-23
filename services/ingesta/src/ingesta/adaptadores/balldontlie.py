@@ -3,8 +3,13 @@
 Built from the balldontlie documentation, not from a live response. `/games?dates[]=` lists a day,
 `/stats?game_ids[]=` returns the player lines of one game (cursor pagination on `meta.next_cursor`).
 Output mirrors AdaptadorBasquetbol: same metric keys, DNPs dropped, ids namespaced `balldontlie:`.
+
+The free tier serves `/games` but answers 401 on `/stats` (box scores are a paid feature, seen live
+on 2026-11-23). A 401 or 403 on `/stats` is logged once and the rest of the run stores games without
+box scores, like TheSportsDB (D-39). A 401 on `/games` still fails the run: that is a bad key.
 """
 
+import logging
 import re
 from datetime import UTC, date, datetime, time
 from typing import Any
@@ -12,6 +17,7 @@ from typing import Any
 from ingesta.adaptadores.base import AdaptadorDeporte
 from ingesta.adaptadores.respaldo import (
     ClienteRespaldo,
+    RespuestaRespaldoError,
     paginar_cursor,
     prefijar,
     quitar_prefijo,
@@ -24,6 +30,8 @@ from ingesta.modelos import (
     JugadorNorm,
     PartidoNorm,
 )
+
+log = logging.getLogger(__name__)
 
 BASE_URL = "https://api.balldontlie.io/v1"
 PROVEEDOR = "balldontlie"
@@ -62,6 +70,7 @@ class AdaptadorBalldontlie(AdaptadorDeporte):
     def __init__(self, cliente: ClienteRespaldo, temporada: str) -> None:
         self._cliente = cliente
         self._temporada = temporada
+        self._stats_sin_acceso = False
 
     def peticiones_usadas(self) -> int:
         return self._cliente.peticiones
@@ -70,8 +79,18 @@ class AdaptadorBalldontlie(AdaptadorDeporte):
         return paginar_cursor(self._cliente, "/games", {"dates[]": fecha.isoformat()})
 
     def obtener_estadisticas(self, partido_proveedor_id: str) -> list[dict[str, Any]]:
+        if self._stats_sin_acceso:
+            return []
         crudo = quitar_prefijo(PROVEEDOR, partido_proveedor_id)
-        return paginar_cursor(self._cliente, "/stats", {"game_ids[]": crudo})
+        try:
+            return paginar_cursor(self._cliente, "/stats", {"game_ids[]": crudo})
+        except RespuestaRespaldoError as err:
+            if err.status not in (401, 403):
+                raise
+            # The key works for /games, so this is the plan: no box scores for the rest of the run.
+            self._stats_sin_acceso = True
+            log.warning("balldontlie sin acceso a /stats (%s): partidos sin estadisticas", err)
+            return []
 
     def normalizar(self, partidos: list[dict[str, Any]]) -> list[PartidoNorm]:
         resultado: list[PartidoNorm] = []

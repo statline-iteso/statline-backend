@@ -1,9 +1,11 @@
 from datetime import UTC, date, datetime
 from typing import Any
 
+import pytest
 from conftest import cargar
 
 from ingesta.adaptadores.balldontlie import AdaptadorBalldontlie, _estatus, _minutos
+from ingesta.adaptadores.respaldo import RespuestaRespaldoError
 from ingesta.modelos import Deporte, EstatusPartido
 from ingesta.validacion import validar_metricas
 
@@ -105,3 +107,39 @@ def test_minutos_acepta_mm_ss_y_entero() -> None:
     assert _minutos("34") == 34
     assert _minutos("") is None
     assert _minutos(None) is None
+
+
+class ClienteSinStats(ClienteFalso):
+    """Free tier: /games works, /stats answers with the given HTTP status."""
+
+    def __init__(self, status: int) -> None:
+        super().__init__()
+        self.status = status
+
+    def get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        if path == "/stats":
+            self.peticiones += 1
+            self.llamadas.append((path, params))
+            raise RespuestaRespaldoError(f"{path}: HTTP {self.status}", self.status)
+        return super().get(path, params)
+
+
+def test_stats_sin_acceso_deja_partidos_sin_estadisticas_el_resto_de_la_corrida() -> None:
+    cliente = ClienteSinStats(401)
+    a = AdaptadorBalldontlie(cliente, "2025-2026")  # type: ignore[arg-type]
+    assert len(a.obtener_partidos(date(2026, 11, 22))) == 2
+    assert a.lineas_del_partido("balldontlie:90001") == []
+    assert a.lineas_del_partido("balldontlie:90002") == []
+    # /stats is asked once; after the 401 the run stops asking.
+    assert [p for p, _ in cliente.llamadas] == ["/games", "/stats"]
+
+
+def test_stats_403_tambien_se_omite() -> None:
+    a = AdaptadorBalldontlie(ClienteSinStats(403), "2025-2026")  # type: ignore[arg-type]
+    assert a.obtener_estadisticas("balldontlie:90001") == []
+
+
+def test_otro_4xx_en_stats_sigue_fallando() -> None:
+    a = AdaptadorBalldontlie(ClienteSinStats(404), "2025-2026")  # type: ignore[arg-type]
+    with pytest.raises(RespuestaRespaldoError, match="404"):
+        a.obtener_estadisticas("balldontlie:90001")

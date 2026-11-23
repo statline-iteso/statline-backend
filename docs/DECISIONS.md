@@ -44,6 +44,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-36 | 2026-11-17 | Demo data carries a strong team-strength signal and defaults to 240 days, so every model trained on it can beat its baseline | Decided |
 | D-37 | 2026-11-19 | The seed ships in the api image (`dist/seed.js`) and runs as a second initContainer after the migrations, so a fresh cluster database gets its leagues and first ADMIN without dev tools | Decided |
 | D-38 | 2026-11-23 | An API-Sports plan error (`errors.plan`, the free plan's season and date limits) is a `PlanSinAccesoError` and switches the run to the fallback, like an outage | Decided |
+| D-39 | 2026-11-23 | A 401 or 403 on balldontlie `/stats` (box scores are paid) stops asking for box scores for the rest of the run; the games are still stored | Decided |
 
 ## 2. Details
 
@@ -156,6 +157,9 @@ In the cluster the database is private to the network (AKS when this was decided
 
 ### D-38 · Plan errors switch to the fallback
 On staging (2026-11-23) the free API-Sports plan answered every request with HTTP 200 and `{"errors": {"plan": "Free plans do not have access to this season, try from 2022 to 2024."}}` (and, for older dates, `…access to this date, try from <yesterday> to <tomorrow>.`). The current seasons and a past-season backfill are both out of reach, so no real data could be ingested. The client now raises `PlanSinAccesoError` for an `errors.plan` body, without retrying, and `AdaptadorConRespaldo` treats it like `CuotaAgotadaError` and `ProveedorCaidoError`. Other `errors` bodies (bad key, bad parameter) still fail the run: those are bugs to fix. **Effect:** with `FALLBACK_HABILITADO=true`, NBA comes from balldontlie (needs `BALLDONTLIE_API_KEY`) and NFL and Liga MX from TheSportsDB (games and scores only, no box scores). With fallback off, nothing changes: the run fails, now with the plan message. The D-26 duplicate risk is smaller with the free plan, because API-Sports never answers for the same day. **Rejected:** retrying (the answer does not change), and moving the seasons to 2024 (the date limit still blocks every past day). **Verified live** on staging (2026-11-23, fallback on, TheSportsDB key `123`): NFL and Liga MX runs for 2026-11-22 switched to TheSportsDB and stored 3 games each, with no box scores, as expected from the free tier.
+
+### D-39 · balldontlie free tier: games without box scores
+Live on staging (2026-11-23, real key): `/games` answered, `/stats` answered HTTP 401, and the NBA run failed after storing the first game. Box scores are a paid feature of balldontlie. `RespuestaRespaldoError` now carries the HTTP status. `AdaptadorBalldontlie` treats a 401 or 403 on `/stats` as "no box scores on this plan": it logs one warning and returns no lines for the rest of the run, so the run succeeds with games and scores only, the same as TheSportsDB for NFL and Liga MX. Any other error on `/stats`, and a 401 on `/games` (a bad key), still fails the run. **Effect:** NBA forecasts can use real results, but player projections need box scores, so they keep training on demo data. **Rejected:** paying for balldontlie (out of the project budget).
 
 ## 3. Known limitations
 
