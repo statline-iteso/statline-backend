@@ -16,6 +16,8 @@ FROM deps AS build
 COPY services/api services/api
 WORKDIR /repo/services/api
 # prisma (the CLI) is a runtime dependency: the initContainer runs `prisma migrate deploy`.
+# The client must be generated inside /out, next to its node_modules, hence the cd.
+# hadolint ignore=DL3003
 RUN pnpm prisma generate && pnpm build \
  && pnpm deploy --filter @statline/api --prod --legacy /out \
  && cp -r prisma /out/prisma \
