@@ -2,8 +2,8 @@ import * as Sentry from "@sentry/node";
 
 /**
  * Sentry error monitoring (statline-infra D-43). Imported first by server.ts, before express and
- * http load, so the SDK can instrument them. Off without SENTRY_DSN: local runs, tests and k3d
- * send nothing.
+ * http load, so the SDK can instrument them. Off unless SENTRY_DSN is an https URL: local runs,
+ * tests, k3d and the SSM placeholder send nothing.
  *
  * - SENTRY_ENVIRONMENT: staging or prod (chart ConfigMap).
  * - SENTRY_RELEASE: the commit the image was built from (Dockerfile build arg), so an error
@@ -12,7 +12,8 @@ import * as Sentry from "@sentry/node";
  */
 export function initSentry(env: NodeJS.ProcessEnv = process.env): boolean {
   const dsn = env.SENTRY_DSN;
-  if (!dsn) return false;
+  // Not an https URL (unset, or Terraform's "set-me" placeholder in SSM): Sentry stays off.
+  if (!dsn?.startsWith("https://")) return false;
   const rate = Number(env.SENTRY_TRACES_SAMPLE_RATE ?? "0");
   Sentry.init({
     dsn,
