@@ -26,6 +26,10 @@ COPY services/predicciones/ ./
 RUN uv sync --frozen --no-dev
 
 FROM python:3.12-slim AS runtime
+# The commit this image was built from (cd.yml build arg; empty in CI). Sentry tags every
+# error with it, and it survives the promotion of the image to prod under another tag (D-43).
+ARG SENTRY_RELEASE=""
+ENV SENTRY_RELEASE=${SENTRY_RELEASE}
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*  && useradd --uid 10001 --create-home predicciones
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv

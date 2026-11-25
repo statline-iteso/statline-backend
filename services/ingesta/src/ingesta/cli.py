@@ -12,6 +12,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from datetime import UTC, date, datetime, timedelta
 
 from prometheus_client import Counter, Gauge
@@ -21,6 +22,7 @@ from ingesta.config import Settings
 from ingesta.demo import DIAS_DEFAULT, SEMILLA_DEFAULT, ResultadoDemo, sembrar
 from ingesta.ejecutor import ejecutar
 from ingesta.modelos import Deporte
+from ingesta.observabilidad import iniciar_checkin, iniciar_sentry, terminar_checkin
 from ingesta.repositorio import RepositorioPostgres
 from ingesta.servidor import servir
 
@@ -97,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.comando == "seed-demo":
         os.environ.setdefault("API_SPORTS_KEY", "demo")  # synthetic data never calls the provider
+    iniciar_sentry()
     settings = Settings()  # type: ignore[call-arg]  # filled from the environment
 
     if args.comando == "serve":
@@ -110,11 +113,19 @@ def main(argv: list[str] | None = None) -> int:
     desde = args.desde or hoy - timedelta(days=1)
     hasta = args.hasta or hoy
 
-    adaptador = crear_adaptador(deporte, settings)
-    repo = RepositorioPostgres.conectar(settings.database_url)
-    resultado = ejecutar(
-        adaptador, repo, desde=desde, hasta=hasta, schemas_dir=settings.schemas_dir
-    )
+    slug = f"ingesta-{deporte.value.lower()}"
+    checkin = iniciar_checkin(slug)
+    inicio = time.monotonic()
+    try:
+        adaptador = crear_adaptador(deporte, settings)
+        repo = RepositorioPostgres.conectar(settings.database_url)
+        resultado = ejecutar(
+            adaptador, repo, desde=desde, hasta=hasta, schemas_dir=settings.schemas_dir
+        )
+    except Exception:
+        terminar_checkin(slug, checkin, exitosa=False, duracion_s=time.monotonic() - inicio)
+        raise
+    terminar_checkin(slug, checkin, exitosa=resultado.exitosa, duracion_s=time.monotonic() - inicio)
     EJECUCIONES.labels(deporte.value, "ok" if resultado.exitosa else "error").inc()
     REGISTROS.labels(deporte.value).set(resultado.partidos + resultado.estadisticas)
     logging.getLogger("ingesta").info("resultado %s", resultado)
