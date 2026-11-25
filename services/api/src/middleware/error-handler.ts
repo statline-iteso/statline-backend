@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import type { ErrorRequestHandler, RequestHandler } from "express";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
@@ -46,6 +47,9 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       return;
     }
   }
+  // Only what ends as a 500 goes to Sentry: the cases above are client errors, not bugs.
+  // A no-op when Sentry is off (no SENTRY_DSN).
+  Sentry.captureException(err);
   req.log?.error({ err }, "unhandled error");
   res.status(500).json({ error: { code: "INTERNAL", message: "Error interno" } });
 };

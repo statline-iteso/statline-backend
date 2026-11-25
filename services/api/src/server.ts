@@ -1,3 +1,5 @@
+// First: Sentry must load before express and http to instrument them.
+import "./instrument";
 import { PrismaClient } from "@prisma/client";
 import pino from "pino";
 import { createApp } from "./app";

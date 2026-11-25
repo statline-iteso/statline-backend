@@ -45,6 +45,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-37 | 2026-11-19 | The seed ships in the api image (`dist/seed.js`) and runs as a second initContainer after the migrations, so a fresh cluster database gets its leagues and first ADMIN without dev tools | Decided |
 | D-38 | 2026-11-23 | An API-Sports plan error (`errors.plan`, the free plan's season and date limits) is a `PlanSinAccesoError` and switches the run to the fallback, like an outage | Decided |
 | D-39 | 2026-11-23 | A 401 or 403 on balldontlie `/stats` (box scores are paid) stops asking for box scores for the rest of the run; the games are still stored | Decided |
+| D-40 | 2026-11-25 | Sentry in the three services: errors that end as a 5xx, ERROR logs (Python), Crons check-ins for ingesta; off without `SENTRY_DSN`; no request bodies, cookies or user data | Decided |
 
 ## 2. Details
 
@@ -160,6 +161,16 @@ On staging (2026-11-23) the free API-Sports plan answered every request with HTT
 
 ### D-39 · balldontlie free tier: games without box scores
 Live on staging (2026-11-23, real key): `/games` answered, `/stats` answered HTTP 401, and the NBA run failed after storing the first game. Box scores are a paid feature of balldontlie. `RespuestaRespaldoError` now carries the HTTP status. `AdaptadorBalldontlie` treats a 401 or 403 on `/stats` as "no box scores on this plan": it logs one warning and returns no lines for the rest of the run, so the run succeeds with games and scores only, the same as TheSportsDB for NFL and Liga MX. Any other error on `/stats`, and a 401 on `/games` (a bad key), still fails the run. **Effect:** NBA forecasts can use real results, but player projections need box scores, so they keep training on demo data. **Rejected:** paying for balldontlie (out of the project budget).
+
+
+### D-40 · Sentry error monitoring
+Errors go to Sentry, one project per service (statline-infra D-43 has the infra side). The SDK starts only when `SENTRY_DSN` is set, so local runs, tests and k3d send nothing.
+- **api:** `src/instrument.ts`, imported first by `server.ts`. Only what `errorHandler` turns into a 500 is reported; validation, auth and not-found errors are client errors.
+- **predicciones:** `sentry_sdk.init` in `create_app`, so the FastAPI integration reports unhandled errors. The two handled 5xx (invalid artifact, PostgreSQL down) are reported explicitly.
+- **ingesta:** errors and ERROR logs (a failed provider call is logged, not raised). `ingesta run <deporte>` sends Sentry Crons check-ins (`ingesta-<deporte>`): in progress, then ok or error from the run's result. The monitor is created on the first check-in, with the schedule the chart passes in `SENTRY_MONITOR_SCHEDULE`. Sentry then alerts when a run fails, takes over 30 minutes, or does not start.
+- **Release:** `SENTRY_RELEASE` is the commit the image was built from, baked in as a build arg, so it stays right when prod runs the promoted staging image under a `vX.Y.Z` tag.
+- **Privacy:** no request bodies (they carry passwords and tokens), cookies, user fields or `Authorization` header (api `dataCollection`; Python `send_default_pii=False`, `max_request_body_size="never"`).
+- **Tracing** is off by default (`SENTRY_TRACES_SAMPLE_RATE=0`) to stay inside the plan's quota; the chart can turn it on per environment.
 
 ## 3. Known limitations
 
