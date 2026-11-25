@@ -1,6 +1,6 @@
 [project]
 name = "statline-predicciones"
-version = "1.0.0"
+version = "1.1.0"
 description = "StatLine inference service: match outcome (logistic regression) and player projections (gradient boosting)"
 requires-python = ">=3.12,<3.13"
 dependencies = [
