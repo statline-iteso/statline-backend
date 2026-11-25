@@ -16,12 +16,18 @@ FROM deps AS build
 COPY services/api services/api
 WORKDIR /repo/services/api
 # prisma (the CLI) is a runtime dependency: the initContainer runs `prisma migrate deploy`.
+# The client must be generated inside /out, next to its node_modules, hence the cd.
+# hadolint ignore=DL3003
 RUN pnpm prisma generate && pnpm build \
  && pnpm deploy --filter @statline/api --prod --legacy /out \
  && cp -r prisma /out/prisma \
  && cd /out && ./node_modules/.bin/prisma generate
 
 FROM node:20-alpine AS runtime
+# The commit this image was built from (cd.yml build arg; empty in CI). Sentry tags every
+# error with it, and it survives the promotion of the image to prod under another tag (D-43).
+ARG SENTRY_RELEASE=""
+ENV SENTRY_RELEASE=${SENTRY_RELEASE}
 # Patched OS packages; npm, npx and corepack are not needed at runtime and bundle their own
 # (often vulnerable) dependencies, so they are removed from the final image.
 RUN apk upgrade --no-cache && apk add --no-cache openssl  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack

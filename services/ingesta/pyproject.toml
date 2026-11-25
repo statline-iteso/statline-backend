@@ -1,6 +1,6 @@
 [project]
 name = "statline-ingesta"
-version = "1.0.0"
+version = "1.1.0"
 description = "StatLine batch ingestion: one CronJob per sport pulls games and box scores from API-Sports"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -10,6 +10,7 @@ dependencies = [
   "jsonschema>=4.23,<5",
   "pydantic-settings>=2.6,<3",
   "prometheus-client>=0.21,<1",
+  "sentry-sdk==2.74.0",
 ]
 
 [project.scripts]

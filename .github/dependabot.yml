@@ -1,0 +1,33 @@
+# Weekly dependency updates as PRs into develop (reviewed like any other PR; auto-merge.yml
+# does not touch them). Minor and patch updates are grouped per ecosystem to keep the PR count
+# low; majors come one by one. Docker majors are ignored: a Node or Python major is a decision
+# (DECISIONS), not a routine bump.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch: { update-types: [minor, patch] }
+  - package-ecosystem: uv
+    directories: [/services/ingesta, /services/predicciones]
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-patch: { update-types: [minor, patch] }
+  - package-ecosystem: docker
+    directories: [/services/api, /services/ingesta, /services/predicciones]
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions: { patterns: ["*"] }

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import psycopg
+import sentry_sdk
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -26,6 +27,7 @@ from predicciones.errores import (
     ModeloNoEncontradoError,
     SinModeloActivoError,
 )
+from predicciones.observabilidad import iniciar_sentry
 from predicciones.schemas import (
     Deporte,
     GenerarPronosticosRequest,
@@ -82,7 +84,8 @@ def _error(status: int, codigo: str, mensaje: str, detalles: Any = None) -> JSON
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="StatLine · predicciones", version="1.0.0")
+    iniciar_sentry()  # before FastAPI(): its integration hooks the app as it is built
+    app = FastAPI(title="StatLine · predicciones", version="1.1.0")
 
     @app.middleware("http")
     async def metricas(
@@ -109,7 +112,9 @@ def create_app() -> FastAPI:
         return _error(404, "NOT_FOUND", "Modelo no encontrado")
 
     @app.exception_handler(ArtefactoInvalidoError)
-    def _artefacto(_req: Request, _exc: ArtefactoInvalidoError) -> JSONResponse:
+    def _artefacto(_req: Request, exc: ArtefactoInvalidoError) -> JSONResponse:
+        # Handled errors never reach Sentry on their own; these 5xx are worth knowing about.
+        sentry_sdk.capture_exception(exc)
         return _error(500, "ARTEFACTO_INVALIDO", "El artefacto del modelo no es válido")
 
     @app.exception_handler(BaseDatosNoDisponibleError)
@@ -117,7 +122,8 @@ def create_app() -> FastAPI:
         return _error(503, "DB_UNAVAILABLE", str(exc))
 
     @app.exception_handler(psycopg.OperationalError)
-    def _db_caida(_req: Request, _exc: psycopg.OperationalError) -> JSONResponse:
+    def _db_caida(_req: Request, exc: psycopg.OperationalError) -> JSONResponse:
+        sentry_sdk.capture_exception(exc)
         return _error(503, "DB_UNAVAILABLE", "PostgreSQL no disponible")
 
     @app.exception_handler(RequestValidationError)
