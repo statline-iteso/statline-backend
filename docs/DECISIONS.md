@@ -164,7 +164,7 @@ Live on staging (2026-11-23, real key): `/games` answered, `/stats` answered HTT
 
 
 ### D-40 · Sentry error monitoring
-Errors go to Sentry, one project per service (statline-infra D-43 has the infra side). The SDK starts only when `SENTRY_DSN` is set, so local runs, tests and k3d send nothing.
+Errors go to Sentry, one project per service (statline-infra D-43 has the infra side). The SDK starts only when `SENTRY_DSN` is an https URL, so local runs, tests, k3d and the SSM placeholder (`set-me`, which would make `sentry_sdk.init` raise) send nothing.
 - **api:** `src/instrument.ts`, imported first by `server.ts`. Only what `errorHandler` turns into a 500 is reported; validation, auth and not-found errors are client errors.
 - **predicciones:** `sentry_sdk.init` in `create_app`, so the FastAPI integration reports unhandled errors. The two handled 5xx (invalid artifact, PostgreSQL down) are reported explicitly.
 - **ingesta:** errors and ERROR logs (a failed provider call is logged, not raised). `ingesta run <deporte>` sends Sentry Crons check-ins (`ingesta-<deporte>`): in progress, then ok or error from the run's result. The monitor is created on the first check-in, with the schedule the chart passes in `SENTRY_MONITOR_SCHEDULE`. Sentry then alerts when a run fails, takes over 30 minutes, or does not start.

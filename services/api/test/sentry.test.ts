@@ -12,8 +12,9 @@ const sentry = Sentry as jest.Mocked<typeof Sentry>;
 describe("initSentry", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("stays off without SENTRY_DSN", () => {
+  it("stays off without SENTRY_DSN or with a placeholder", () => {
     expect(initSentry({})).toBe(false);
+    expect(initSentry({ SENTRY_DSN: "set-me" })).toBe(false);
     expect(sentry.init).not.toHaveBeenCalled();
   });
 

@@ -26,7 +26,9 @@ def tasa_de_trazas(valor: str | None) -> float:
 
 def iniciar_sentry(env: Mapping[str, str] = os.environ) -> bool:
     dsn = env.get("SENTRY_DSN", "")
-    if not dsn:
+    # Not an https URL (unset, or Terraform's "set-me" placeholder in SSM): Sentry stays off.
+    # sentry_sdk.init would raise on an invalid DSN and crash the service.
+    if not dsn.startswith("https://"):
         return False
     sentry_sdk.init(
         dsn=dsn,

@@ -6,6 +6,7 @@ from predicciones.observabilidad import iniciar_sentry, tasa_de_trazas
 def test_sin_dsn_no_inicia() -> None:
     with patch("predicciones.observabilidad.sentry_sdk.init") as init:
         assert iniciar_sentry({}) is False
+        assert iniciar_sentry({"SENTRY_DSN": "set-me"}) is False
     init.assert_not_called()
 
 
