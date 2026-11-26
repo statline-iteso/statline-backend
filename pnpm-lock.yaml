@@ -218,8 +218,8 @@ importers:
         version: 3.23.8
     devDependencies:
       '@eslint/js':
-        specifier: 9.15.0
-        version: 9.15.0
+        specifier: 10.0.1
+        version: 10.0.1(eslint@9.15.0(supports-color@8.1.1))
       '@types/bcryptjs':
         specifier: 2.4.6
         version: 2.4.6
@@ -605,6 +605,15 @@ packages:
   '@eslint/eslintrc@3.3.7':
     resolution: {integrity: sha512-F42g89Qd5oAWtp0k0nnSrjziAKza7w8SVT4mStc18LZMaRb4J1HQAHLCalEtDCxrTuksx7NU9qsmeLwpOfPqWw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@eslint/js@10.0.1':
+    resolution: {integrity: sha512-zeR9k5pd4gxjZ0abRoIaxdc7I3nDktoXZk2qOv9gCNWx3mVwEn32VRhyLaRsDiJjTs0xq/T8mfPtyuXu7GWBcA==}
+    engines: {node: ^20.19.0 || ^22.13.0 || >=24}
+    peerDependencies:
+      eslint: ^10.0.0
+    peerDependenciesMeta:
+      eslint:
+        optional: true
 
   '@eslint/js@9.15.0':
     resolution: {integrity: sha512-tMTqrY+EzbXmKJR5ToI8lxu7jaN5EdmrBFJpQk5JmSlyLsx6o4t27r883K5xsLuCYCpfKBCGswMSWXsM+jB7lg==}
@@ -3079,6 +3088,10 @@ snapshots:
       strip-json-comments: 3.1.1
     transitivePeerDependencies:
       - supports-color
+
+  '@eslint/js@10.0.1(eslint@9.15.0(supports-color@8.1.1))':
+    optionalDependencies:
+      eslint: 9.15.0(supports-color@8.1.1)
 
   '@eslint/js@9.15.0': {}
 
