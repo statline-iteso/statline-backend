@@ -1,17 +1,20 @@
 import type { RequestHandler } from "express";
-import type { Claims, Rol, TokenService } from "../lib/auth";
+import type { Claims, Rol } from "../lib/auth";
+import type { Autenticador } from "../lib/cognito";
 import { forbidden, unauthorized } from "../lib/errors";
 
-export function requireAuth(tokens: TokenService): RequestHandler {
+/** Bearer token → res.locals.user. The autenticador is local JWT or Cognito (AUTH_MODE). */
+export function requireAuth(autenticar: Autenticador): RequestHandler {
   return (req, res, next) => {
     const [scheme, token] = (req.header("authorization") ?? "").split(" ");
     if (scheme !== "Bearer" || !token) return next(unauthorized());
-    try {
-      res.locals.user = tokens.verifyAccess(token);
-      next();
-    } catch (err) {
-      next(err);
-    }
+    autenticar(token).then(
+      (claims) => {
+        res.locals.user = claims;
+        next();
+      },
+      (err: unknown) => next(err),
+    );
   };
 }
 

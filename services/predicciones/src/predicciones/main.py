@@ -85,7 +85,7 @@ def _error(status: int, codigo: str, mensaje: str, detalles: Any = None) -> JSON
 
 def create_app() -> FastAPI:
     iniciar_sentry()  # before FastAPI(): its integration hooks the app as it is built
-    app = FastAPI(title="StatLine · predicciones", version="1.1.0")
+    app = FastAPI(title="StatLine · predicciones", version="1.2.0")
 
     @app.middleware("http")
     async def metricas(
