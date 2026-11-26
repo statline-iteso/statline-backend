@@ -40,7 +40,20 @@ describe("sembrar", () => {
     expect(llamada.update).toEqual({});
     expect(llamada.create.rol).toBe("ADMIN");
     expect(llamada.create.passwordHash).not.toBe("s3creto-largo");
-    await expect(verifyPassword("s3creto-largo", llamada.create.passwordHash)).resolves.toBe(true);
+    await expect(verifyPassword("s3creto-largo", llamada.create.passwordHash!)).resolves.toBe(true);
+  });
+
+  it("in Cognito mode creates the ADMIN row with no password, even without SEED_ADMIN_PASSWORD", async () => {
+    const r = await sembrar(prisma, { AUTH_MODE: "cognito" });
+    expect(r.admin).toBe(ADMIN_EMAIL_DEFAULT);
+    const llamada = prisma.usuario.upsert.mock.calls[0]![0];
+    expect(llamada.where).toEqual({ email: ADMIN_EMAIL_DEFAULT });
+    expect(llamada.update).toEqual({ rol: "ADMIN" });
+    expect(llamada.create).toEqual({
+      email: ADMIN_EMAIL_DEFAULT,
+      nombre: "Administrador",
+      rol: "ADMIN",
+    });
   });
 
   it("uses SEED_ADMIN_EMAIL when given", async () => {

@@ -21,6 +21,7 @@ import { ingestasRouter } from "./routes/ingestas";
 import { crearLanzadorDeshabilitado, type LanzadorIngesta } from "./lib/ingesta-lanzador";
 import { modelosRouter, pronosticosRouter, proyeccionesRouter } from "./routes/predicciones";
 import type { PrediccionesClient } from "./lib/predicciones";
+import type { Autenticador } from "./lib/cognito";
 
 export interface AppDeps {
   prisma: PrismaClient;
@@ -40,6 +41,11 @@ export interface AppDeps {
   /** Manual ingestion launcher; defaults to the disabled one (503). */
   lanzador?: LanzadorIngesta;
   predicciones: PrediccionesClient;
+  /**
+   * Cognito mode (AUTH_MODE=cognito, D-47): verifies Cognito ID tokens. Unset: local mode, our own
+   * JWTs from `tokens`. In Cognito mode /api/auth/* and the public sign-up answer 404.
+   */
+  cognito?: Autenticador;
 }
 
 /** Composition root for HTTP. server.ts wires real dependencies; tests pass fakes. */
@@ -83,7 +89,9 @@ export function createApp(deps: AppDeps): Express {
   app.use("/api", limiters.global);
   app.post("/api/auth/login", limiters.login);
 
-  const auth = requireAuth(deps.tokens);
+  const autenticar: Autenticador =
+    deps.cognito ?? ((token) => Promise.resolve().then(() => deps.tokens.verifyAccess(token)));
+  const auth = requireAuth(autenticar);
   const adminOnly = requireRole("ADMIN");
   const cache = createCatalogCache({
     redis: redis?.client,
@@ -93,8 +101,9 @@ export function createApp(deps: AppDeps): Express {
   });
   const catalogo = { prisma: deps.prisma, adminOnly, cache };
 
-  app.use("/api/auth", authRouter(deps));
-  app.use("/api/usuarios", usuariosRouter({ prisma: deps.prisma, auth }));
+  const cognito = deps.cognito !== undefined;
+  if (!cognito) app.use("/api/auth", authRouter(deps));
+  app.use("/api/usuarios", usuariosRouter({ prisma: deps.prisma, auth, cognito }));
   app.use("/api/ligas", auth, ligasRouter(catalogo));
   app.use("/api/equipos", auth, equiposRouter(catalogo));
   app.use("/api/jugadores", auth, jugadoresRouter({ ...catalogo, schemasDir: deps.schemasDir }));

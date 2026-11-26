@@ -82,7 +82,10 @@ model Usuario {
   id            String             @id @default(uuid()) @db.Uuid
   email         String             @unique
   nombre        String
-  passwordHash  String             @map("password_hash")
+  /// Null for users who sign in through Cognito (AUTH_MODE=cognito, D-47).
+  passwordHash  String?            @map("password_hash")
+  /// Cognito user id (`sub` of the ID token), set on the first Cognito sign-in.
+  cognitoSub    String?            @unique @map("cognito_sub")
   rol           Rol                @default(USUARIO)
   creadoEn      DateTime           @default(now()) @map("creado_en")
   actualizadoEn DateTime           @updatedAt @map("actualizado_en")

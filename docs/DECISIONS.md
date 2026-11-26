@@ -46,6 +46,7 @@ Add a new entry whenever something is decided; don't rewrite history. Replaced d
 | D-38 | 2026-11-23 | An API-Sports plan error (`errors.plan`, the free plan's season and date limits) is a `PlanSinAccesoError` and switches the run to the fallback, like an outage | Decided |
 | D-39 | 2026-11-23 | A 401 or 403 on balldontlie `/stats` (box scores are paid) stops asking for box scores for the rest of the run; the games are still stored | Decided |
 | D-40 | 2026-11-25 | Sentry in the three services: errors that end as a 5xx, ERROR logs (Python), Crons check-ins for ingesta; off without `SENTRY_DSN`; no request bodies, cookies or user data | Decided |
+| D-41 | 2026-11-25 | `AUTH_MODE=cognito`: the api accepts Cognito ID tokens (`aws-jwt-verify`) and maps them to `Usuario` rows by `cognito_sub`, then verified email, else a new USUARIO; roles stay in PostgreSQL; `local` (our JWTs) stays the default (infra D-47) | Decided |
 
 ## 2. Details
 
@@ -171,6 +172,16 @@ Errors go to Sentry, one project per service (statline-infra D-43 has the infra 
 - **Release:** `SENTRY_RELEASE` is the commit the image was built from, baked in as a build arg, so it stays right when prod runs the promoted staging image under a `vX.Y.Z` tag.
 - **Privacy:** no request bodies (they carry passwords and tokens), cookies, user fields or `Authorization` header (api `dataCollection`; Python `send_default_pii=False`, `max_request_body_size="never"`).
 - **Tracing** is off by default (`SENTRY_TRACES_SAMPLE_RATE=0`) to stay inside the plan's quota; the chart can turn it on per environment.
+
+### D-41 · Cognito ID tokens (AUTH_MODE=cognito)
+Infra D-47 moves sign-up, sign-in and password resets to Amazon Cognito. The api keeps roles and every relation to `Usuario`, so only authentication changes.
+- **Verification:** `src/lib/cognito.ts` checks the bearer as a Cognito **ID token** of the SPA's client (`CognitoJwtVerifier`, `tokenUse: "id"`). The pool's public keys are fetched once over HTTPS and cached; no AWS credentials are needed.
+- **Mapping to `Usuario`:** by `cognito_sub` (new unique column); if absent, by email, but only when Cognito says it is verified, and the row gets linked; otherwise a new row with role USUARIO (name from the token, else the email's local part). A race between two first requests (P2002) retries once. `res.locals.user` keeps the same `{sub, rol}` claims, so no route changed.
+- **What is off in cognito mode:** `/api/auth/login`, `/api/auth/refresh` and the public `POST /api/usuarios` answer 404; `PUT /api/usuarios/:id` with a `password` answers 400. Role changes by an ADMIN work as before and apply on the next request, since the role is read on every request.
+- **Schema:** `password_hash` is nullable (Cognito users have none) and `cognito_sub` is new (migration `20261125120000_cognito_sub`). Local login refuses rows without a hash.
+- **Seed:** with `AUTH_MODE=cognito` the seed upserts the ADMIN row (`SEED_ADMIN_EMAIL`) with no password; infra creates the same email in each pool and sets its password, and the first sign-in links them.
+- **Local mode** stays the default for compose, CI and k3d, with its tests unchanged.
+- **Limits:** every request reads the `Usuario` row (one indexed lookup); deleting a row does not delete the Cognito account, which comes back as USUARIO on its next sign-in.
 
 ## 3. Known limitations
 

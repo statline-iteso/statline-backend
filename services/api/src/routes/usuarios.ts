@@ -2,7 +2,7 @@ import { Router, type RequestHandler } from "express";
 import type { PrismaClient } from "@prisma/client";
 import { ah } from "../lib/async";
 import { hashPassword, verifyPassword, type Claims, type TokenService } from "../lib/auth";
-import { forbidden, notFound, unauthorized } from "../lib/errors";
+import { badRequest, forbidden, notFound, unauthorized } from "../lib/errors";
 import { IdParamSchema, PaginationSchema } from "../lib/crud";
 import { requireRole } from "../middleware/auth";
 import { CreateUsuarioSchema, LoginSchema, RefreshSchema, UpdateUsuarioSchema } from "./schemas";
@@ -27,7 +27,7 @@ export function authRouter(deps: { prisma: PrismaClient; tokens: TokenService })
       const { email, password } = LoginSchema.parse(req.body);
       const user = await deps.prisma.usuario.findUnique({ where: { email } });
       // Same error for unknown email and wrong password, so emails can't be enumerated.
-      if (!user || !(await verifyPassword(password, user.passwordHash))) {
+      if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
         throw unauthorized("Credenciales inválidas");
       }
       const claims: Claims = { sub: user.id, rol: user.rol };
@@ -62,9 +62,14 @@ export function authRouter(deps: { prisma: PrismaClient; tokens: TokenService })
  * /api/usuarios. POST is public (sign-up, always role USUARIO). Listing and deleting are
  * ADMIN only; a user can read and update only their own record unless they are ADMIN.
  */
-export function usuariosRouter(deps: { prisma: PrismaClient; auth: RequestHandler }): Router {
+export function usuariosRouter(deps: {
+  prisma: PrismaClient;
+  auth: RequestHandler;
+  /** Cognito mode: sign-up and passwords live in Cognito, so POST and password changes are off. */
+  cognito?: boolean;
+}): Router {
   const router = Router();
-  const { prisma, auth } = deps;
+  const { prisma, auth, cognito = false } = deps;
 
   const selfOrAdmin: RequestHandler = (req, res, next) => {
     const user = res.locals.user as Claims;
@@ -75,6 +80,7 @@ export function usuariosRouter(deps: { prisma: PrismaClient; auth: RequestHandle
   router.post(
     "/",
     ah(async (req, res) => {
+      if (cognito) throw notFound("Ruta");
       const { email, nombre, password } = CreateUsuarioSchema.parse(req.body);
       const usuario = await prisma.usuario.create({
         data: { email, nombre, passwordHash: await hashPassword(password) },
@@ -123,6 +129,7 @@ export function usuariosRouter(deps: { prisma: PrismaClient; auth: RequestHandle
       const { id } = IdParamSchema.parse(req.params);
       const { nombre, password, rol } = UpdateUsuarioSchema.parse(req.body);
       if (rol && (res.locals.user as Claims).rol !== "ADMIN") throw forbidden();
+      if (password && cognito) throw badRequest("La contraseña se cambia en Cognito");
       const usuario = await prisma.usuario.update({
         where: { id },
         data: {
