@@ -10,7 +10,7 @@ dependencies = [
   "psycopg[binary,pool]>=3.2,<4",
   "prometheus-client>=0.21,<1",
   "scikit-learn>=1.5,<2",
-  "pandas>=2.2,<3",
+  "pandas>=2.2,<4",
   "joblib>=1.4,<2",
   "sentry-sdk[fastapi]==2.74.0",
 ]
