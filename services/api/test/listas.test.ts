@@ -1,6 +1,6 @@
 import request from "supertest";
 import { Prisma } from "@prisma/client";
-import { USER_ID, bearer, buildApp } from "./helpers";
+import { ADMIN_ID, USER_ID, bearer, buildApp } from "./helpers";
 
 const LISTA = "11111111-aaaa-4aaa-8aaa-111111111111";
 const JUGADOR = "77777777-7777-4777-8777-777777777777";
@@ -24,7 +24,7 @@ describe("/api/listas ownership", () => {
     expect((await request(app).get("/api/listas")).status).toBe(401);
   });
 
-  it("lists only the caller's lists; ADMIN lists all", async () => {
+  it("lists only the caller's lists, also for ADMIN", async () => {
     const { app, prisma } = buildApp();
     prisma.listaSeguimiento.findMany.mockResolvedValue([lista()] as never);
     prisma.listaSeguimiento.count.mockResolvedValue(1);
@@ -38,7 +38,7 @@ describe("/api/listas ownership", () => {
     const admin = await request(app).get("/api/listas").set("Authorization", bearer("ADMIN"));
     expect(admin.status).toBe(200);
     expect(prisma.listaSeguimiento.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({ where: {} }),
+      expect.objectContaining({ where: { usuarioId: ADMIN_ID } }),
     );
   });
 
@@ -111,7 +111,7 @@ describe("/api/listas ownership", () => {
     expect(prisma.elementoLista.create).not.toHaveBeenCalled();
   });
 
-  it("ADMIN can read another user's list but not change it", async () => {
+  it("ADMIN can neither read nor change another user's list (404)", async () => {
     const { app, prisma } = buildApp();
     prisma.listaSeguimiento.findUnique.mockResolvedValue(
       lista({ usuarioId: OTRO_USUARIO }) as never,
@@ -119,7 +119,7 @@ describe("/api/listas ownership", () => {
     const admin = bearer("ADMIN");
     expect(
       (await request(app).get(`/api/listas/${LISTA}`).set("Authorization", admin)).status,
-    ).toBe(200);
+    ).toBe(404);
     expect(
       (await request(app).delete(`/api/listas/${LISTA}`).set("Authorization", admin)).status,
     ).toBe(404);

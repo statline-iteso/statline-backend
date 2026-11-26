@@ -13,18 +13,17 @@ interface Deps {
 const userOf = (res: Response) => res.locals.user as Claims;
 
 /**
- * /api/listas: each user sees and changes only their own lists. Lists of other users are
- * answered with 404 (not 403) so their ids can't be probed. ADMIN can read every list but
- * still changes only its own (D-18).
+ * /api/listas: each user, ADMIN included, sees and changes only their own lists. Lists of other
+ * users are answered with 404 (not 403) so their ids can't be probed (D-18).
  */
 export function listasRouter({ prisma }: Deps): Router {
   const router = Router();
 
-  /** Loads a list the caller may access, or throws 404. */
+  /** Loads a list the caller owns, or throws 404. */
   async function cargar(
     req: { params: unknown },
     res: Response,
-    { lectura, incluirElementos = false }: { lectura: boolean; incluirElementos?: boolean },
+    { incluirElementos = false }: { incluirElementos?: boolean } = {},
   ) {
     const { id } = IdParamSchema.parse(req.params);
     const user = userOf(res);
@@ -32,9 +31,7 @@ export function listasRouter({ prisma }: Deps): Router {
       where: { id },
       include: incluirElementos ? { elementos: true } : undefined,
     });
-    const propia = lista?.usuarioId === user.sub;
-    const admin = lectura && user.rol === "ADMIN";
-    if (!lista || !(propia || admin)) throw notFound("Lista");
+    if (!lista || lista.usuarioId !== user.sub) throw notFound("Lista");
     return lista;
   }
 
@@ -43,7 +40,7 @@ export function listasRouter({ prisma }: Deps): Router {
     ah(async (req, res) => {
       const { page, pageSize } = PaginationSchema.parse(req.query);
       const user = userOf(res);
-      const where = user.rol === "ADMIN" ? {} : { usuarioId: user.sub };
+      const where = { usuarioId: user.sub };
       const [data, total] = await Promise.all([
         prisma.listaSeguimiento.findMany({
           where,
@@ -71,14 +68,14 @@ export function listasRouter({ prisma }: Deps): Router {
   router.get(
     "/:id",
     ah(async (req, res) => {
-      res.json(await cargar(req, res, { lectura: true, incluirElementos: true }));
+      res.json(await cargar(req, res, { incluirElementos: true }));
     }),
   );
 
   router.put(
     "/:id",
     ah(async (req, res) => {
-      const lista = await cargar(req, res, { lectura: false });
+      const lista = await cargar(req, res);
       const { nombre } = UpdateListaSchema.parse(req.body);
       res.json(await prisma.listaSeguimiento.update({ where: { id: lista.id }, data: { nombre } }));
     }),
@@ -87,7 +84,7 @@ export function listasRouter({ prisma }: Deps): Router {
   router.delete(
     "/:id",
     ah(async (req, res) => {
-      const lista = await cargar(req, res, { lectura: false });
+      const lista = await cargar(req, res);
       await prisma.listaSeguimiento.delete({ where: { id: lista.id } });
       res.status(204).end();
     }),
@@ -98,7 +95,7 @@ export function listasRouter({ prisma }: Deps): Router {
     "/:id/elementos",
     ah(async (req, res) => {
       const { tipo, refId } = ElementoListaSchema.parse(req.body);
-      const lista = await cargar(req, res, { lectura: false });
+      const lista = await cargar(req, res);
       if (tipo === "JUGADOR") {
         if (!(await prisma.jugador.findUnique({ where: { id: refId }, select: { id: true } }))) {
           throw notFound("Jugador");
@@ -121,7 +118,7 @@ export function listasRouter({ prisma }: Deps): Router {
     "/:id/elementos/:ref",
     ah(async (req, res) => {
       const ref = IdParamSchema.shape.id.parse(req.params.ref);
-      const lista = await cargar(req, res, { lectura: false });
+      const lista = await cargar(req, res);
       const { count } = await prisma.elementoLista.deleteMany({
         where: { listaId: lista.id, refId: ref },
       });
