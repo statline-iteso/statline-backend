@@ -11,3 +11,6 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+jest-results.json
+pytest-results.xml
+coverage.json
