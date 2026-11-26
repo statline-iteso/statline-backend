@@ -147,6 +147,21 @@ describe("routes in Cognito mode", () => {
     expect(res.status).toBe(200);
   });
 
+  it("GET /api/usuarios/me returns the caller's record", async () => {
+    const { app, prisma } = conCognito("ADMIN");
+    prisma.usuario.findUnique.mockResolvedValueOnce(fila({ rol: "ADMIN" }) as never);
+    const res = await request(app).get("/api/usuarios/me").set("Authorization", "Bearer x");
+    expect(res.status).toBe(200);
+    expect(res.body.rol).toBe("ADMIN");
+    expect(prisma.usuario.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: USER_ID } }),
+    );
+    prisma.usuario.findUnique.mockResolvedValueOnce(null);
+    expect(
+      (await request(app).get("/api/usuarios/me").set("Authorization", "Bearer x")).status,
+    ).toBe(404);
+  });
+
   it("turns off /api/auth/login and the public sign-up", async () => {
     const { app } = conCognito();
     expect(

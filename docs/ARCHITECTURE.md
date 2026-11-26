@@ -51,6 +51,7 @@ The full table with examples is in infra [`docs/api.md`](https://github.com/stat
 | Route | Notes |
 |---|---|
 | `GET /healthz`, `GET /readyz`, `GET /metrics` | readyz runs `SELECT 1`; with `REDIS_URL` also a PING (503 if either fails; body `checks` names the failing one). Probes and `/metrics` are never rate limited |
+| `GET /api/usuarios/me` | the caller's own record (any role); the SPA reads it after a Cognito sign-in (D-41) |
 | `POST /api/auth/login`, `POST /api/auth/refresh` | access 15 min, refresh 7 days; refresh re-reads the role. `AUTH_MODE=local` only: with `cognito` both, and the public `POST /api/usuarios`, answer 404 (D-41) |
 | `/api/usuarios` CRUD | sign-up public (always USUARIO); self-or-admin; only ADMIN changes roles |
 | `/api/ligas` CRUD `?deporte=` · `/:id/posiciones` · `/:id/calendario` | |

@@ -109,6 +109,21 @@ export function usuariosRouter(deps: {
     }),
   );
 
+  // The caller's own record: the SPA reads its id, name and role after a Cognito sign-in (D-41).
+  router.get(
+    "/me",
+    auth,
+    ah(async (_req, res) => {
+      const { sub } = res.locals.user as Claims;
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: sub },
+        select: PUBLIC_FIELDS,
+      });
+      if (!usuario) throw notFound("Usuario");
+      res.json(usuario);
+    }),
+  );
+
   router.get(
     "/:id",
     auth,
