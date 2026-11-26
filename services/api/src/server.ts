@@ -29,7 +29,6 @@ const cognito =
         }),
       })
     : undefined;
-logger.info({ authMode: config.AUTH_MODE }, "auth mode");
 
 const app = createApp({
   prisma,
