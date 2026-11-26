@@ -40,7 +40,14 @@ jobs:
       - run: pnpm --filter @statline/api format:check
       - run: pnpm --filter @statline/api typecheck
       - name: Unit tests (Jest + Supertest, coverage ≥ 70 %)
-        run: pnpm --filter @statline/api test:coverage
+        run: >-
+          pnpm --filter @statline/api test:coverage --json --outputFile=jest-results.json
+          --coverageReporters=text --coverageReporters=json-summary
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        run: >-
+          node .github/scripts/resumen-pruebas.mjs "api · Jest"
+          services/api/jest-results.json services/api/coverage/coverage-summary.json
 
   python:
     name: ${{ matrix.service }} · ruff, mypy, pytest
@@ -65,7 +72,12 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - name: Unit tests (pytest, coverage ≥ 70 %)
-        run: uv run pytest
+        run: uv run pytest --junitxml=pytest-results.xml --cov-report=json:coverage.json
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        env:
+          SERVICIO: ${{ matrix.service }}
+        run: uv run python ../../.github/scripts/resumen_pytest.py "$SERVICIO · pytest" pytest-results.xml coverage.json
 
   integration:
     name: integration · PostgreSQL 16
