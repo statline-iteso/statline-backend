@@ -7,6 +7,7 @@ const usuario = {
   email: "ana@example.com",
   nombre: "Ana",
   rol: "USUARIO" as const,
+  cognitoSub: null,
   creadoEn: new Date(),
   actualizadoEn: new Date(),
 };

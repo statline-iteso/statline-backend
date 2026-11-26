@@ -73,9 +73,21 @@ export async function sembrar(
     );
   }
 
+  const email = env.SEED_ADMIN_EMAIL || ADMIN_EMAIL_DEFAULT;
+  if (env.AUTH_MODE === "cognito") {
+    // Cognito keeps the password (infra D-47); the first Cognito sign-in with this email links
+    // to this row, which carries the ADMIN role.
+    await upsertTolerante(() =>
+      prisma.usuario.upsert({
+        where: { email },
+        update: { rol: "ADMIN" },
+        create: { email, nombre: "Administrador", rol: "ADMIN" },
+      }),
+    );
+    return { ligas: LIGAS.length, admin: email };
+  }
   const password = env.SEED_ADMIN_PASSWORD;
   if (!password) return { ligas: LIGAS.length, admin: null };
-  const email = env.SEED_ADMIN_EMAIL || ADMIN_EMAIL_DEFAULT;
   const passwordHash = await hashPassword(password);
   await upsertTolerante(() =>
     prisma.usuario.upsert({
